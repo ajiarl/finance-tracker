@@ -1,0 +1,97 @@
+<?php
+
+namespace App\Observers;
+
+use App\Models\Budget;
+use App\Models\Transaction;
+
+class TransactionObserver
+{
+    public function created(Transaction $transaction): void
+    {
+        $this->adjustMatchingBudgetSpent(
+            userId: $transaction->user_id,
+            categoryId: $transaction->category_id,
+            transactionDate: $transaction->transaction_date,
+            delta: (float) $transaction->amount,
+            type: $transaction->type,
+        );
+    }
+
+    public function updated(Transaction $transaction): void
+    {
+        $this->adjustMatchingBudgetSpent(
+            userId: $transaction->getOriginal('user_id'),
+            categoryId: $transaction->getOriginal('category_id'),
+            transactionDate: $transaction->getOriginal('transaction_date'),
+            delta: -1 * (float) $transaction->getOriginal('amount'),
+            type: $transaction->getOriginal('type', 'expense'),
+        );
+
+        $this->adjustMatchingBudgetSpent(
+            userId: $transaction->user_id,
+            categoryId: $transaction->category_id,
+            transactionDate: $transaction->transaction_date,
+            delta: (float) $transaction->amount,
+            type: $transaction->type,
+        );
+    }
+
+    public function deleted(Transaction $transaction): void
+    {
+        $this->adjustMatchingBudgetSpent(
+            userId: $transaction->user_id,
+            categoryId: $transaction->category_id,
+            transactionDate: $transaction->transaction_date,
+            delta: -1 * (float) $transaction->amount,
+            type: $transaction->type,
+        );
+    }
+
+    public function restored(Transaction $transaction): void
+    {
+        $this->adjustMatchingBudgetSpent(
+            userId: $transaction->user_id,
+            categoryId: $transaction->category_id,
+            transactionDate: $transaction->transaction_date,
+            delta: (float) $transaction->amount,
+            type: $transaction->type,
+        );
+    }
+
+    public function forceDeleted(Transaction $transaction): void
+    {
+        //
+    }
+
+    private function adjustMatchingBudgetSpent(
+        ?int $userId,
+        ?int $categoryId,
+        $transactionDate,
+        float $delta,
+        string $type = 'expense'
+    ): void {
+        if (! $userId || ! $categoryId || ! $transactionDate || $delta === 0.0) {
+            return;
+        }
+
+        if ($type !== 'expense') {
+            return;
+        }
+
+        $budget = Budget::query()
+            ->where('user_id', $userId)
+            ->where('category_id', $categoryId)
+            ->where('is_active', true)
+            ->whereDate('start_date', '<=', $transactionDate)
+            ->whereDate('end_date', '>=', $transactionDate)
+            ->first();
+
+        if (! $budget) {
+            return;
+        }
+
+        $budget->spent = max(0, (float) $budget->spent + $delta);
+        $budget->save();
+    }
+}

@@ -1,0 +1,177 @@
+@baseUrl = http://127.0.0.1:8000
+@token = PASTE_BEARER_TOKEN_HERE
+@accountId = 1
+@incomeCategoryId = 1
+@expenseCategoryId = 2
+@transactionId = 1
+
+### Login
+POST {{baseUrl}}/api/login
+Accept: application/json
+Content-Type: application/json
+
+{
+  "email": "test@email.com",
+  "password": "password123"
+}
+
+### Create account
+POST {{baseUrl}}/api/accounts
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "BCA",
+  "type": "bank",
+  "balance": 0
+}
+
+### List accounts
+GET {{baseUrl}}/api/accounts
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Create expense category
+POST {{baseUrl}}/api/categories
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "Makan",
+  "type": "expense",
+  "icon": "🍜",
+  "color": "#FF5733"
+}
+
+### List categories
+GET {{baseUrl}}/api/categories
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### List income categories
+GET {{baseUrl}}/api/categories?type=income
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### List expense categories
+GET {{baseUrl}}/api/categories?type=expense
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Show current user
+GET {{baseUrl}}/api/user
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Logout
+POST {{baseUrl}}/api/logout
+Accept: application/json
+Authorization: Bearer {{token}}
+
+{
+}
+
+### List all transactions
+GET {{baseUrl}}/api/transactions
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Filter by type
+GET {{baseUrl}}/api/transactions?type=expense
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Filter by date range
+GET {{baseUrl}}/api/transactions?date_from=2026-05-01&date_to=2026-05-31
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Filter by account
+GET {{baseUrl}}/api/transactions?account_id={{accountId}}
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Show single transaction
+GET {{baseUrl}}/api/transactions/{{transactionId}}
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Create income
+POST {{baseUrl}}/api/transactions
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "account_id": {{accountId}},
+  "category_id": {{incomeCategoryId}},
+  "type": "income",
+  "amount": 5000000,
+  "description": "Gaji bulan Mei",
+  "transaction_date": "2026-05-06",
+  "notes": "Transfer dari kantor"
+}
+
+### Create expense
+POST {{baseUrl}}/api/transactions
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "account_id": {{accountId}},
+  "category_id": {{expenseCategoryId}},
+  "type": "expense",
+  "amount": 50000,
+  "description": "Makan siang",
+  "transaction_date": "2026-05-06"
+}
+
+### Update transaction
+PUT {{baseUrl}}/api/transactions/{{transactionId}}
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "description": "Gaji bulan Mei sudah diupdate",
+  "amount": 5500000,
+  "transaction_date": "2026-05-06"
+}
+
+### Delete transaction
+DELETE {{baseUrl}}/api/transactions/{{transactionId}}
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Edge case: no token
+GET {{baseUrl}}/api/transactions
+Accept: application/json
+
+### Edge case: invalid amount
+POST {{baseUrl}}/api/transactions
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "account_id": {{accountId}},
+  "type": "expense",
+  "amount": -999,
+  "transaction_date": "2026-05-06"
+}
+
+### Edge case: wrong type
+POST {{baseUrl}}/api/transactions
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "account_id": {{accountId}},
+  "type": "belanja",
+  "amount": 10000,
+  "transaction_date": "2026-05-06"
+}
