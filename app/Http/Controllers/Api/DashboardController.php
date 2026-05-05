@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\Budget;
 use App\Models\Transaction;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Carbon;
 
 class DashboardController extends Controller
@@ -15,7 +17,7 @@ class DashboardController extends Controller
     public function index(Request $request): JsonResponse
     {
         $userId = $request->user()->id;
-        $now = Carbon::now();
+        $now = $this->resolveMonth($request);
 
         $totalBalance = (float) Account::where('user_id', $userId)
             ->where('is_active', true)
@@ -65,5 +67,98 @@ class DashboardController extends Controller
                 'budgets' => $budgets,
             ],
         ]);
+    }
+
+    public function charts(Request $request): JsonResponse
+    {
+        $userId = $request->user()->id;
+        $month = $this->resolveMonth($request);
+        $start = $month->copy()->startOfMonth();
+        $end = $month->copy()->endOfMonth();
+
+        $transactions = Transaction::query()
+            ->forUser($userId)
+            ->with('category:id,name,type,color')
+            ->whereBetween('transaction_date', [$start->toDateString(), $end->toDateString()])
+            ->orderBy('transaction_date')
+            ->get(['id', 'type', 'amount', 'transaction_date', 'category_id']);
+
+        $categoryBreakdown = $transactions
+            ->where('type', 'expense')
+            ->groupBy('category_id')
+            ->map(function (Collection $items) {
+                $first = $items->first();
+                $category = $first?->category;
+                $total = (float) $items->sum('amount');
+
+                return [
+                    'category_id' => $first?->category_id,
+                    'name' => $category?->name ?? 'Tanpa Kategori',
+                    'color' => $category?->color,
+                    'total' => $total,
+                ];
+            })
+            ->sortByDesc('total')
+            ->values();
+
+        $weeklyTrend = $transactions
+            ->groupBy(function (Transaction $transaction) {
+                return Carbon::parse($transaction->transaction_date)->startOfWeek()->toDateString();
+            })
+            ->map(function (Collection $items, string $weekStart) {
+                $income = (float) $items->where('type', 'income')->sum('amount');
+                $expense = (float) $items->where('type', 'expense')->sum('amount');
+                $transfer = (float) $items->where('type', 'transfer')->sum('amount');
+
+                return [
+                    'week_start' => $weekStart,
+                    'week_end' => Carbon::parse($weekStart)->endOfWeek()->toDateString(),
+                    'income' => $income,
+                    'expense' => $expense,
+                    'transfer' => $transfer,
+                    'net' => $income - $expense - $transfer,
+                ];
+            })
+            ->values();
+
+        $dailyCashflow = collect();
+        $cursor = $start->copy();
+        while ($cursor->lte($end)) {
+            $date = $cursor->toDateString();
+            $items = $transactions->filter(fn (Transaction $transaction) => $transaction->transaction_date->toDateString() === $date);
+            $income = (float) $items->where('type', 'income')->sum('amount');
+            $expense = (float) $items->where('type', 'expense')->sum('amount');
+            $transfer = (float) $items->where('type', 'transfer')->sum('amount');
+
+            $dailyCashflow->push([
+                'date' => $date,
+                'income' => $income,
+                'expense' => $expense,
+                'transfer' => $transfer,
+                'net' => $income - $expense - $transfer,
+            ]);
+
+            $cursor->addDay();
+        }
+
+        return response()->json([
+            'data' => [
+                'month' => $month->format('Y-m'),
+                'category_breakdown' => $categoryBreakdown,
+                'weekly_trend' => $weeklyTrend,
+                'daily_cashflow' => $dailyCashflow,
+            ],
+        ]);
+    }
+
+    private function resolveMonth(Request $request): Carbon
+    {
+        $month = $request->query('month');
+
+        if (! $month) {
+            return Carbon::now();
+        }
+
+        return Carbon::createFromFormat('Y-m', $month)->startOfMonth();
     }
 }

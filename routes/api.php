@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\BudgetController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\ImportController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\TransactionController;
 
 // Public routes
@@ -17,6 +19,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('dashboard', [DashboardController::class, 'index']);
+    Route::get('dashboard/charts', [DashboardController::class, 'charts']);
+    Route::post('imports/csv', [ImportController::class, 'uploadCsv']);
+    Route::get('imports/{import}/status', [ImportController::class, 'status']);
+    Route::post('imports/{import}/map', [ImportController::class, 'map']);
+    Route::post('reports', [ReportController::class, 'store']);
+    Route::get('reports/{report}/status', [ReportController::class, 'status']);
+    Route::get('reports/{report}/download', [ReportController::class, 'download'])->name('reports.download');
 
     Route::apiResource('accounts',     AccountController::class);
     Route::apiResource('categories', CategoryController::class)

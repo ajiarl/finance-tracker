@@ -1,0 +1,12 @@
+{
+  "account_id": 3,
+  "column_mappings": {
+    "date": "date",
+    "amount": "amount",
+    "type": "type",
+    "category": "category",
+    "description": "description",
+    "notes": "notes"
+  },
+  "has_header": true
+}

@@ -1,0 +1,1117 @@
+# PRD
+
+## 1. Overview
+A lightweight, mobile-first Personal Finance Tracker for Indonesian students and early-career professionals. Backend: Laravel REST API (Sanctum/Passport). Frontend: React + Vite + Tailwind. Deploy to Oracle Free Tier VPS (Ubuntu). Focus: fast mobile data entry, CSV import, monthly budgets & alerts, localized IDR/Bahasa Indonesia, PDF/Excel exports, and on-device / self-hosted AI-powered insights (no external AI APIs).
+
+Goals for Phase 1 (1 semester):
+- Core ledger: transactions, categories, accounts (cash/e-wallet).
+- Monthly budgets with alerts and simple projection.
+- CSV import, fast-entry UI, dashboard charts, monthly report exports (PDF/Excel).
+- Conversational AI insights using a local/embedded model or lightweight time-series library (no third‑party AI APIs).
+- Authentication (Sanctum/Passport), privacy-first defaults.
+
+Success metrics:
+- Daily active users (DAU) vs target class size.
+- Time-to-entry: <10s for common transaction.
+- CSV import: 95% success on test files.
+- Reports generation under 30s (queued for large exports).
+
+## 2. Requirements
+Functional
+- Secure user auth (email/password, tokens).
+- CRUD for transactions, categories, accounts, budgets.
+- Monthly budget creation, tracking, alerts (in-app + optional email/push).
+- CSV import with validation & chunked processing.
+- Exports: PDF and Excel per month.
+- Dashboard endpoints for charts (monthly totals, category breakdown).
+- AI insights endpoint: forecast, anomaly detection, saving recommendations (local).
+- Reports generation via queued job (e.g., GenerateReport job).
+
+Non-functional
+- Mobile-first responsive UI; low bandwidth friendly.
+- Deployable on single small VPS (Oracle Free Tier).
+- Data privacy: user data stored only on VPS, encrypted at rest/transport.
+- Localized currency formatting (IDR) and Bahasa Indonesia strings.
+- Reasonable performance for single-tenant/small multi-tenant usage.
+
+Constraints (see section 7).
+
+## 3. Core Features
+1. Fast Transaction Entry
+   - Quick-add modal with smart defaults (last category, recurring amounts).
+   - Bulk CSV import with mapping UI.
+
+2. Transaction Management & Categories
+   - Multi-category tagging (one primary + optional tags).
+   - Accounts (Cash, E-wallets) with balances.
+
+3. Budgets & Alerts
+   - Monthly budgets by category; progress %; threshold alerts (50/75/90%).
+   - In-app alerts; optional email/push via SMTP/FCM.
+
+4. Dashboard & Reports
+   - Summary card (balance, monthly income/expense).
+   - Charts: category breakdown, cashflow forecast, weekly trend.
+   - Monthly PDF/Excel exports (via queued job).
+
+5. AI-Powered Insights (Local)
+   - Forecast next-month spend per category.
+   - Anomaly detection for outliers.
+   - Concrete saving recommendations (e.g., cut X in dining to meet goal).
+   - Conversational UI on the frontend that queries the API for analysis.
+
+6. Import/Export
+   - CSV import with mapping, validation, chunked processing.
+   - Exports via Laravel Excel / DomPDF.
+
+7. Settings & Onboarding
+   - Currency set to IDR, language default Bahasa Indonesia.
+   - Data export/download and account deletion.
+
+## 4. User Flow
+1. Onboarding
+   - Sign up (email + password) → basic profile (monthly income, default account).
+   - Option: import CSV (map columns) or skip.
+
+2. Daily Use
+   - Fast-add transaction → select account, amount, category, date, note.
+   - Dashboard shows updated totals and progress vs budgets.
+
+3. Budgeting
+   - Create monthly budget per category → receive alerts as thresholds cross.
+   - View budget breakdown and projected shortfalls.
+
+4. Reports & Export
+   - Request monthly report → backend enqueues GenerateReport job → user notified when ready to download (PDF/Excel).
+
+5. AI Insights
+   - User opens "Analyze" → API returns forecasts, anomalies, and tailored recommendations in Bahasa Indonesia and IDR formatting.
+   - Option to ask follow-up questions in conversational UI (handled client-side + API).
+
+6. Data Management
+   - Import CSV page for bulk uploads; background processing with progress/status.
+   - Settings page for email/push preferences and data export/delete.
+
+## 5. Architecture & Integrations
+High level:
+- Frontend: React + Vite + Tailwind + TanStack Query.
+- Backend: Laravel REST API (Sanctum or Passport), queued jobs (Redis or database queue), scheduled tasks (cron).
+- DB: MySQL/MariaDB.
+- Exports: maatwebsite/excel, DomPDF.
+- CSV import: Laravel file validation + chunked processing (Storage::disk('local')->putFileAs()).
+- AI: Embedded/local service (PHP ML lib or small Python microservice on same VPS) or TensorFlow.js on frontend.
+- Notifications: Laravel Notifications (in-app); optional SMTP / FCM / Resend as integrations.
+
+API Endpoints (Phase 1): (all endpoints use JSON; Authorization: Bearer token via Sanctum/Passport unless noted)
+
+| Method | Path | Auth | Request payload | Notes / Response |
+|---|---:|---|---|---|
+| POST | /api/auth/register | No | { "name", "email", "password" } | Creates user, returns token |
+| POST | /api/auth/login | No | { "email", "password" } | Returns { user, token } |
+| POST | /api/auth/logout | Yes | - | Revoke token |
+| GET | /api/me | Yes | - | Current user profile & settings |
+| GET | /api/categories | Yes | - | List default + user categories |
+| POST | /api/categories | Yes | { "name", "type" } | Create category |
+| GET | /api/accounts | Yes | - | Cash/e-wallet accounts with balances |
+| POST | /api/accounts | Yes | { "name","type","starting_balance" } | Create account |
+| GET | /api/transactions?from=&to=&account=&category= | Yes | - | Paginated transactions |
+| POST | /api/transactions | Yes | { "date","amount","type","account_id","category_id","note","tags":[...] } | Create transaction |
+| GET | /api/transactions/{id} | Yes | - | Fetch transaction |
+| PUT | /api/transactions/{id} | Yes | Partial fields | Update |
+| DELETE | /api/transactions/{id} | Yes | - | Delete (soft) |
+| POST | /api/imports/csv | Yes | multipart/form-data file, { "account_id" } | Start CSV import; server validates & stores; returns import_id |
+| GET | /api/imports/{id}/status | Yes | - | Import status & errors |
+| POST | /api/imports/{id}/map | Yes | { "column_mappings": { "amount":"col3", ... } } | Start chunked processing job |
+| GET | /api/budgets | Yes | ?month=YYYY-MM | List budgets |
+| POST | /api/budgets | Yes | { "month","category_id","amount" } | Create budget |
+| PUT | /api/budgets/{id} | Yes | - | Update |
+| POST | /api/budgets/{id}/alerts | Yes | { "thresholds":[50,75,90], "channels":["in_app","email"] } | Set alerts |
+| GET | /api/dashboard/summary?month=YYYY-MM | Yes | - | Totals, month-over-month, top categories |
+| GET | /api/dashboard/charts?month=YYYY-MM | Yes | - | Data-ready for charts |
+| POST | /api/reports | Yes | { "month":"YYYY-MM", "format":"pdf|xlsx" } | Enqueues GenerateReport job; returns report_id |
+| GET | /api/reports/{id}/status | Yes | - | Status + download_url when ready |
+| GET | /api/exports/monthly?month=YYYY-MM&format=pdf | Yes | - | Synchronous small export (limited) |
+| POST | /api/ai/analyze | Yes | { "scope":"month|category|custom","params":{...} } | Returns { forecasts, anomalies, recommendations } — executed by local ML module/microservice |
+| GET | /api/notifications | Yes | - | In-app notifications (budget alerts, report ready) |
+| POST | /api/settings | Yes | { "language","currency","notify_email","notify_push" } | Save preferences |
+| DELETE | /api/account | Yes | { "confirm":true } | Data deletion export-first flow |
+
+Notes from provided API DOCS to include in architecture:
+- Exports and report generation use queued jobs (example job: GenerateReport).
+- CSV import uses Laravel file validation and chunked processing (Storage::disk('local')->putFileAs()).
+- Exports via maatwebsite/excel and DomPDF are recommended—no external APIs required.
+- Authentication via Laravel Sanctum or Passport is used for API tokens[2][3].
+- Budget alerts implemented via Laravel Notifications (in-app; optional email/SMS via Mailgun/SendGrid later).
+- AI insights: use lightweight open-source libraries like Prophet (via phpml/phpml) or a small Python microservice on same VPS, or TensorFlow.js on frontend—no external AI APIs required.
+- If optional email integration is desired later, example Resend API (external) format from docs:
+  - POST /emails
+  - Body JSON: {"from": "...", "to": [...], "subject": "...", "html": "..."}
+
+Security & deployment:
+- HTTPS via Let's Encrypt.
+- DB backups via scheduled dumps to object storage (or SFTP).
+- Use database queue or Redis for jobs, depending on VPS resources.
+- PHP-FPM + Nginx, serve frontend as static or via Vite SSR if needed.
+
+## 6. Database Schema
+All timestamps (created_at, updated_at). Use foreign keys where appropriate.
+
+Tables:
+
+- users
+  - id (PK, bigint)
+  - name varchar(191)
+  - email varchar(191) unique
+  - password varchar(255)
+  - locale varchar(10) default 'id'
+  - currency varchar(5) default 'IDR'
+  - settings json nullable
+  - created_at, updated_at
+
+- accounts
+  - id, user_id FK -> users
+  - name varchar(100)
+  - type enum('cash','ewallet','bank','other')
+  - starting_balance decimal(14,2)
+  - current_balance decimal(14,2)
+  - metadata json
+  - created_at, updated_at
+
+- categories
+  - id, user_id nullable (null = default shared)
+  - name varchar(100)
+  - type enum('expense','income','transfer')
+  - color varchar(7)
+  - created_at, updated_at
+
+- transactions
+  - id, user_id FK
+  - account_id FK
+  - type enum('expense','income','transfer')
+  - amount decimal(14,2)
+  - date date
+  - category_id FK nullable
+  - note text nullable
+  - meta json (tags, source)
+  - imported boolean default false
+  - external_id varchar(191) nullable
+  - soft deletes (deleted_at)
+  - created_at, updated_at
+  - indexes: (user_id,date), (account_id)
+
+- budgets
+  - id, user_id FK
+  - month char(7) e.g., '2026-05'
+  - category_id FK
+  - amount decimal(14,2)
+  - spent decimal(14,2) cached
+  - created_at, updated_at
+  - unique(user_id, month, category_id)
+
+- budget_alerts
+  - id, budget_id FK
+  - thresholds json e.g., [50,75,90]
+  - channels json e.g., ['in_app','email']
+  - last_alerted json (timestamp per threshold)
+  - created_at, updated_at
+
+- imports
+  - id, user_id FK
+  - filename varchar(255)
+  - status enum('uploaded','mapping','processing','completed','failed')
+  - rows_total int
+  - rows_processed int
+  - errors json nullable
+  - created_at, updated_at
+
+- reports
+  - id, user_id FK
+  - month char(7)
+  - format enum('pdf','xlsx')
+  - status enum('queued','processing','ready','failed')
+  - file_path varchar(255) nullable
+  - created_at, updated_at
+
+- ai_analyses
+  - id, user_id FK
+  - scope varchar(50)
+  - input json
+  - result json
+  - created_at, updated_at
+
+- notifications
+  - id, user_id FK
+  - type varchar(100)
+  - data json
+  - read_at datetime nullable
+  - created_at
+
+Indexes, FK constraints, and cascading rules should be enforced for data integrity.
+
+## 7. Constraints
+- Hosting: Single small VPS (Oracle Free Tier) — limited CPU/RAM → prefer DB on same machine, database tuning, prefer database queue over Redis if resources limited.
+- Storage: Keep exports and imports limited; purge old files; limit synchronous exports to small sizes.
+- Compute: Heavy ML tasks should be lightweight or run as batch jobs; consider a small Python microservice only if PHP options are insufficient.
+- No external bank integrations or payment processors in Phase 1 (explicitly excluded).
+- No external AI APIs (OpenAI/Groq) — use local models/libraries only as per project scope.
+- Privacy/legal: Data stays on VPS; implement export and delete flows to satisfy user control.
+- Timeline: Fit within one semester; scope features to MVP first (core ledger, budgets, CSV import, exports, simple AI insights).
+- Team & skills: Laravel required (backend), React + Vite (frontend), basic DevOps for Ubuntu/Nginx deploy.
+- Libraries noted: maatwebsite/excel, DomPDF, phpml/phpml or a small Python service for Prophet, Sanctum/Passport for auth.
+- Optional integrations can be added later (SMTP, FCM). Example external email API (if used later): POST /emails with JSON {"from": "...", "to": [...], "subject": "...", "html": "..."}.
+
+Endpoints and payload formats above incorporate the provided API DOCS guidance: CSV import via Laravel Storage and chunked processing, queued job GenerateReport for exports, Laravel Notifications for budget alerts, and use of Laravel Sanctum/Passport for authentication. No external APIs are required for Phase 1.
+
+---
+
+BRD — Phase 2 (Extension of Phase 1 PRD)
+
+Purpose
+- Expand the MVP from Phase 1 into a more robust, user-centric Personal Finance Tracker for Indonesian students and early-career professionals while preserving privacy-first, single-VPS deployability and no external AI APIs.
+- Deliver higher automation, better offline/online sync, richer AI insights (still local), and pragmatic integrations (SMTP/FCM) to increase retention and time-savings.
+
+Goals (90-day Phase 2)
+- Improve user retention & utility: reduce manual entry, surface actionable recommendations, and enable basic sharing/backup.
+- Add recurring transactions, device sync & conflict resolution, attachments (receipt images), scheduled jobs for ML training & heavier analysis, and export management/purging.
+- Harden ops: automated backups, monitoring, lightweight CI, and optimized VPS footprint.
+
+Success metrics
+- DAU retention rate +10% vs Phase 1 baseline.
+- Time-to-entry reduced by 25% via rules/recurring.
+- CSV import success rate stays >=95% with expanded parser library support.
+- AI analysis job turnaround <=60s for typical datasets (queued for heavy analyses).
+- Exports automatically purge after retention policy; storage saved by 30%.
+
+Scope (what Phase 2 adds)
+- Recurring transactions: create, edit, auto-generate instances.
+- Auto-mapping rules: remember user CSV mapping and infer mappings; bank CSV presets.
+- Attachments: upload receipt images, store encrypted on-disk; optional OCR microservice (local) to suggest fields.
+- Device sync: register devices, client-side change queue, server-side simple conflict resolution by timestamp + user choice.
+- Offline-first support (client): local cache + eventual sync endpoints.
+- AI enhancements (local): scheduled retraining jobs, improved forecasts (category & user-level), confidence scores, scenario simulations ("If I cut dining by 20%") — still via local Python microservice or lightweight PHP libs.
+- Webhooks: optional internal webhooks for report-ready, import-complete, budget-alerts (for advanced users).
+- Admin / maintenance endpoints: purge exports, view queue length, re-enqueue job.
+- Improved notification channels: SMTP (Resend-compatible) and FCM for push.
+- Multi-device session management and revocation.
+
+Out of scope (Phase 2)
+- Direct bank integrations (OAuth, PSD2), external commercial AI APIs, multi-tenant SaaS billing, complex role-based access control.
+
+Stakeholders
+- Product Owner: student/early-career user community representatives
+- Backend Lead (Laravel), Frontend Lead (React + Vite), DevOps (Ubuntu/Nginx), Data/ML Engineer (Python optional)
+- QA, Localization lead (Bahasa Indonesia/IDR formatting), Security reviewer
+
+Risks & Mitigations
+- VPS resource exhaustion from ML/OCR: schedule heavy jobs, CPU/IO limits, fallback to queued batch, provide “run later” UI.
+- Data loss: automated daily DB dumps + encrypted offsite copy (SFTP) + user export flow.
+- Privacy: encryption at rest (file system encryption + DB column encryption for sensitive metadata) and strict access controls.
+
+MVP Deliverables (Phase 2 priority order)
+1. Recurring transactions + rules engine (CSV mapping persistence).
+2. Attachments + basic local OCR job (queue).
+3. Device registration + sync endpoints; conflict resolution UIs.
+4. AI microservice enhancements: scheduled retrain, scenario analysis, confidence.
+5. Admin endpoints (purge/requeue) + export retention policy.
+6. SMTP/FCM integration & webhook support.
+
+Detailed Tech Stack (Phase 2)
+
+Core
+- Backend: Laravel 10 LTS (PHP 8.2+), Sanctum for SPA tokens (Passport optional for OAuth tokens).
+- Frontend: React 18 + Vite, TailwindCSS, TanStack Query (data fetching & cache), Zustand or React Query mutations for offline queue.
+- DB: MySQL 8 / MariaDB 10.6 (single-node on VPS). Use InnoDB, tuned buffers for limited RAM.
+- Queue: Database queue (default) for constrained VPS; Redis optional if provisioned (faster).
+- Web server: Nginx + PHP-FPM.
+- Files: OS filesystem (encrypted LUKS or fs-level encryption) under /var/www/storage, limited retention; optional SFTP offsite backup.
+- Export libraries: maatwebsite/excel, DomPDF, Spatie/laravel-activitylog.
+- CSV processing: laravel-chunk-upload + chunked reader, custom parsers and presets.
+- AI & ML:
+  - Option A (preferred Phase 2): small Python microservice (Flask/FastAPI) deployed as systemd service or container on same VPS; libraries: Prophet (fbprophet via prophet), scikit-learn, numpy, pandas, statsmodels — used for forecasting & anomaly detection.
+  - Option B (fallback): phpml/phpml + simple time-series heuristics; lower accuracy but single-language.
+  - OCR (optional): Tesseract (local binary) invoked by queued job for receipt parsing.
+- Attachments: store encrypted files; use Laravel Filesystem with local disk and encryption layer (Laravel encryption of metadata/paths).
+- Monitoring & logs: Prometheus node exporter (minimal) or lightweight monitors (Netdata), centralized logs via rotated files + optional external shipper.
+- CI/CD: GitHub Actions for linting, tests, builds; deploy script: rsync build artifacts + artisan migrate --force + composer install.
+- TLS: Let's Encrypt (certbot). Fail2ban, UFW hardening.
+- Backups: daily mysqldump + gz + encrypted offsite (SFTP) retention 14 days; exports retention policy (e.g., 30 days).
+- Security: HTTPS, DB user with least privilege, password hashing via Argon2id/Bcrypt, rate-limits on auth endpoints, Sentry (optional) for error monitoring.
+
+Deployment Topology (single VPS)
+- Nginx reverse proxy -> PHP-FPM -> Laravel app
+- MySQL on same host
+- Python microservice runs on localhost:5000 (systemd) communicating via HTTP + local unix socket
+- Worker: php artisan queue:work (database) or supervisor configured
+- Cron: laravel schedule via crontab
+- Storage: /var/www/app/storage (encrypted)
+- Ports: 80/443 open; 22 for admin (key-based)
+
+Operational guidelines
+- Keep heavy jobs queued; schedule heavy ML retrains during night hours.
+- Limit synchronous exports; route large exports to background GenerateReport job.
+- Monitor disk usage and enforce purge policies automatically.
+
+API Documentation — Internal Endpoints (Phase 2)
+Authorization: All protected endpoints require Authorization: Bearer <token> (Sanctum/Passport). All requests & responses use JSON except multipart uploads.
+
+General error envelope (HTTP 4xx/5xx)
+- { "error": "Short message", "details": {...}, "code": 400 }
+
+1) Auth & Profile (unchanged but explicit)
+- POST /api/auth/register
+  - Auth: No
+  - Request JSON:
+    { "name": "string", "email": "user@example.com", "password": "string" }
+  - Response 201:
+    { "user": { "id": 1, "name": "...", "email": "...", "locale":"id", "currency":"IDR" }, "token": "jwt_or_sanctum_token" }
+
+- POST /api/auth/login
+  - Request:
+    { "email":"user@example.com", "password":"string" }
+  - Response 200:
+    { "user": {...}, "token":"..." }
+
+- POST /api/auth/logout
+  - Auth required
+  - Request: {}
+  - Response 200: { "ok": true }
+
+- GET /api/me
+  - Response:
+    { "id":1, "name":"", "email":"", "locale":"id", "currency":"IDR", "settings": {...} }
+
+2) Accounts & Balances
+- GET /api/accounts
+  - Response:
+    [ { "id":1, "user_id":1, "name":"Cash", "type":"cash", "starting_balance":"500000.00", "current_balance":"123000.00", "metadata":{}, "created_at":"..." } ]
+
+- POST /api/accounts
+  - Request:
+    { "name":"Jenius", "type":"ewallet", "starting_balance":500000.00, "metadata": { "icon":"jenius" } }
+  - Response 201: created account object
+
+- POST /api/accounts/{id}/reconcile
+  - Request:
+    { "reported_balance": 120000.00, "as_of":"2026-05-04", "notes":"Cash count" }
+  - Response 200:
+    { "account_id":1, "previous_balance":"123000.00", "new_balance":"120000.00", "reconciled_at":"..." }
+
+3) Categories
+- GET /api/categories
+  - Response: list, includes default shared categories (user_id null)
+
+- POST /api/categories
+  - Request:
+    { "name":"Makan", "type":"expense", "color":"#FF7043" }
+  - Response: created category
+
+4) Transactions (core)
+- GET /api/transactions?from=2026-05-01&to=2026-05-31&account=1&category=2&page=1
+  - Response:
+    { "data":[{ "id":1, "user_id":1, "account_id":1, "type":"expense", "amount":"25000.00", "date":"2026-05-03", "category_id":5, "note":"Makan siang", "meta":{"tags":["lunch"]}, "imported":false }], "meta":{ "page":1,"per_page":20,"total":123 } }
+
+- POST /api/transactions
+  - Request:
+    { "date":"2026-05-04", "amount": 20000.00, "type":"expense", "account_id":1, "category_id":5, "note":"Snack", "tags":["snack"], "recurring_rule_id": null }
+  - Response 201: created transaction
+
+- PUT /api/transactions/{id}
+  - Request: partial fields
+    { "amount": 22000.00, "note":"Updated note" }
+  - Response 200: updated transaction
+
+- DELETE /api/transactions/{id}
+  - Soft delete (deleted_at)
+  - Response 204
+
+5) Recurring rules (Phase 2)
+- GET /api/recurring
+  - Response: [ { "id":1, "user_id":1, "interval":"monthly", "day":5, "amount":50000.00, "category_id":5, "next_run":"2026-06-05", "active":true } ]
+
+- POST /api/recurring
+  - Request:
+    { "interval":"monthly", "day":5, "amount":50000.00, "type":"expense", "account_id":1, "category_id":5, "auto_create":true, "note":"Langganan" }
+  - Response 201: rule object
+
+- POST /api/recurring/{id}/generate
+  - Force-generate next instance (admin/user)
+  - Request: {}
+  - Response: created transaction object
+
+6) CSV Import (expanded)
+- POST /api/imports/csv (multipart/form-data)
+  - Auth required
+  - Form parts: file=<csv>, account_id=1, preset="bca" (optional)
+  - Response 201:
+    { "import_id": 123, "status":"uploaded", "filename":"transactions_2026-05.csv", "rows_total": null }
+
+- GET /api/imports/{id}/status
+  - Response:
+    { "import_id":123, "status":"mapping", "rows_total":200, "rows_processed":0, "errors":[] }
+
+- POST /api/imports/{id}/map
+  - Request:
+    { "column_mappings": { "date":"col1", "amount":"col4", "description":"col3" }, "date_format":"d/m/Y", "has_header":true, "rules": [ { "match":"Makan", "category_id":5 } ] }
+  - Response 200:
+    { "job_id":"job_abc", "status":"processing" }
+
+- GET /api/imports/{id}/preview
+  - Returns first 10 parsed rows and suggested mappings
+  - Response:
+    { "sample":[ { "row":1, "cols":{ "col1":"01/05/2026", "col2":"Debit", "col3":"Makan", "col4":"25000" } } ], "suggested_mappings": { "date":"col1", "amount":"col4", "description":"col3" } }
+
+7) Imports mapping presets
+- GET /api/imports/presets
+  - Response: list of bank CSV presets (name, sample header)
+
+8) Attachments & OCR
+- POST /api/attachments (multipart)
+  - Request multipart: file (image/pdf), transaction_id (optional)
+  - Response 201:
+    { "id":321, "file_path":"encrypted/path.jpg", "transaction_id":null, "ocr_job_id": 777 }
+  - The file is saved and an OCR job enqueued if image.
+
+- GET /api/attachments/{id}
+  - Response: metadata (download URL expiring), linked transaction id
+
+- GET /api/ocr/{job_id}/status
+  - Response:
+    { "job_id":777, "status":"completed", "result": { "amount":25000.00, "date":"2026-05-04", "merchant":"Warung ABC" } }
+
+9) Budgets & Alerts (Phase 1 + phase2 improvements)
+- GET /api/budgets?month=2026-05
+  - Response: list budgets with cached spent and progress
+
+- POST /api/budgets
+  - Request:
+    { "month":"2026-06", "category_id":5, "amount": 500000.00 }
+  - Response 201: created budget
+
+- POST /api/budgets/{id}/alerts
+  - Request:
+    { "thresholds": [50,75,90], "channels": ["in_app","email","push"], "snooze_minutes": 60 }
+  - Response 200
+
+10) Dashboard & Charts
+- GET /api/dashboard/summary?month=2026-05
+  - Response:
+    { "balance":"123000.00", "income":"3500000.00", "expense":"2100000.00", "top_categories":[{ "category_id":5, "amount":"500000.00" }], "forecast_next_month":"-150000.00" }
+
+- GET /api/dashboard/charts?month=2026-05
+  - Response: chart-ready datasets (category_breakdown array, weekly_trend array, cashflow_forecast array with timestamps and confidence intervals)
+
+11) Reports & Exports
+- POST /api/reports
+  - Request:
+    { "month":"2026-05", "format":"pdf" }
+  - Response 202:
+    { "report_id": 555, "status":"queued" }
+
+- GET /api/reports/{id}/status
+  - Response 200:
+    { "report_id":555, "status":"ready", "download_url":"https://.../reports/555.pdf" }
+
+- POST /api/reports/{id}/regenerate
+  - Request: {}
+  - Response: updated report queued
+
+- DELETE /api/reports/{id}
+  - Deletes stored file
+  - Response 204
+
+12) AI Analysis (Phase 2 richer)
+- POST /api/ai/analyze
+  - Request:
+    { "scope":"month", "params": { "month":"2026-05", "categories":[5,7], "horizon":1 }, "mode":"fast" }
+  - Response 200:
+    { "analysis_id": 901, "forecasts": [ { "category_id":5, "next_month": 450000.00, "confidence":0.78 } ], "anomalies":[ { "transaction_id":123, "score":0.95, "reason":"High amount vs history" } ], "recommendations":[ { "text":"Kurangi makan di luar 20% untuk hemat IDR 90.000", "impact":90000 } ], "language":"id", "currency":"IDR" }
+
+- GET /api/ai/analyses/{id}
+  - Returns persisted analysis result
+
+- POST /api/ai/train (admin / user-scheduled)
+  - Request:
+    { "scope":"user", "period":"2024-01:2026-05", "priority":"low" }
+  - Response:
+    { "job_id":"train_123", "status":"queued" }
+
+13) Device Sync & Offline
+- POST /api/devices/register
+  - Request:
+    { "name":"Pixel 4a", "device_id":"uuid", "last_sync":"2026-05-03T12:00:00Z" }
+  - Response:
+    { "device_token":"dtkn_abc" }
+
+- POST /api/sync/push
+  - Client pushes local changes:
+    { "device_token":"dtkn_abc", "changes":[ { "operation":"create","entity":"transaction","payload":{...},"client_id":"c123","timestamp":"2026-05-04T10:05:00Z" } ] }
+  - Server returns resolution:
+    { "applied":[ { "client_id":"c123","server_id":1 } ], "conflicts":[ { "client_id":"c456","server_id":3,"server":"changed","client":"changed","resolution":"server_wins" } ] }
+
+- GET /api/sync/pull?since=2026-05-03T00:00:00Z
+  - Response:
+    { "changes":[ {...} ], "server_time":"..." }
+
+14) Webhooks & Admin
+- POST /api/webhooks (user-managed)
+  - Request:
+    { "url":"https://example.com/hook", "events":["report.ready","import.completed"], "secret":"hmac_key" }
+  - Response 201
+
+- POST /api/admin/purge-exports
+  - Request:
+    { "older_than_days":30 }
+  - Auth: admin
+  - Response:
+    { "purged_count": 55 }
+
+15) Notifications
+- GET /api/notifications
+  - Response: list of notifications (in-app)
+
+- POST /api/settings
+  - Request:
+    { "language":"id", "currency":"IDR", "notify_email":true, "notify_push":true, "export_retention_days":30 }
+  - Response 200: saved settings
+
+16) Account Deletion & Data Export
+- POST /api/account/export
+  - Request: { "format":"json" }
+  - Response:
+    { "export_id": 777, "status":"queued" }
+
+- DELETE /api/account
+  - Request:
+    { "confirm": true, "downloaded_export_id":777 }
+  - Response 202: { "status":"deletion_queued" }
+
+Notes
+- All amounts returned as strings to avoid floating precision issues; decimal(14,2) on DB.
+- Dates returned in ISO 8601 (YYYY-MM-DD) and timestamps in ISO 8601 with timezone.
+- All endpoints return Bahasa Indonesia localized messages on client request Accept-Language: id by default; numeric formatting (IDR) left to frontend but responses include currency and numeric strings.
+
+Entity Relationship Diagram (mermaid erDiagram)
+- Use this mermaid block in code/renderers that support it:
+
+erDiagram
+    USERS ||--o{ ACCOUNTS : owns
+    USERS ||--o{ TRANSACTIONS : has
+    USERS ||--o{ CATEGORIES : custom_categories
+    USERS ||--o{ BUDGETS : sets
+    USERS ||--o{ IMPORTS : uploads
+    USERS ||--o{ REPORTS : requests
+    USERS ||--o{ AI_ANALYSES : requests
+    USERS ||--o{ NOTIFICATIONS : receives
+    ACCOUNTS ||--o{ TRANSACTIONS : contains
+    CATEGORIES ||--o{ TRANSACTIONS : categorizes
+    BUDGETS ||--o{ BUDGET_ALERTS : configures
+    BUDGETS }o--|| CATEGORIES : for
+    IMPORTS ||--o{ IMPORT_ROWS : contains
+    TRANSACTIONS ||--o{ ATTACHMENTS : has
+    RECURRING_RULES ||--o{ TRANSACTIONS : generates
+    USERS ||--o{ RECURRING_RULES : creates
+    DEVICES ||--o{ SYNC_LOGS : records
+    WEBHOOKS ||--o{ WEBHOOK_EVENTS : logs
+
+Database Schema (Tables, Columns, Types, Constraints)
+
+Note: use appropriate migrations; timestamps created_at, updated_at on all tables. Soft deletes where indicated.
+
+Table: users
+- id: bigint unsigned PK auto-increment
+- name: varchar(191) NOT NULL
+- email: varchar(191) NOT NULL UNIQUE
+- password: varchar(255) NOT NULL
+- locale: varchar(10) NOT NULL DEFAULT 'id'
+- currency: varchar(5) NOT NULL DEFAULT 'IDR'
+- settings: json NULL
+- created_at: timestamp NULL
+- updated_at: timestamp NULL
+- deleted_at: timestamp NULL (if soft delete for accounts? keep optional)
+
+Table: accounts
+- id: bigint PK
+- user_id: bigint unsigned NOT NULL -> users.id (on delete cascade)
+- name: varchar(100) NOT NULL
+- type: enum('cash','ewallet','bank','other') NOT NULL
+- starting_balance: decimal(14,2) NOT NULL DEFAULT 0.00
+- current_balance: decimal(14,2) NOT NULL DEFAULT 0.00
+- metadata: json NULL
+- created_at, updated_at
+- indexes: (user_id), (type)
+
+Table: categories
+- id: bigint PK
+- user_id: bigint NULL -> users.id (NULL = shared default)
+- name: varchar(100) NOT NULL
+- type: enum('expense','income','transfer') NOT NULL
+- color: varchar(7) NULL
+- created_at, updated_at
+- index (user_id)
+
+Table: transactions
+- id: bigint PK
+- user_id: bigint FK -> users.id (on delete cascade)
+- account_id: bigint FK -> accounts.id (on delete cascade)
+- type: enum('expense','income','transfer') NOT NULL
+- amount: decimal(14,2) NOT NULL
+- date: date NOT NULL
+- category_id: bigint NULL FK -> categories.id (on delete set null)
+- note: text NULL
+- meta: json NULL (tags, source)
+- imported: boolean NOT NULL DEFAULT false
+- external_id: varchar(191) NULL
+- recurring_rule_id: bigint NULL FK -> recurring_rules.id (on delete set null)
+- created_at, updated_at, deleted_at (soft deletes)
+- indexes: (user_id,date), (account_id), (external_id)
+
+Table: budgets
+- id: bigint PK
+- user_id: bigint FK -> users.id (cascade)
+- month: char(7) NOT NULL -- 'YYYY-MM'
+- category_id: bigint FK -> categories.id (cascade or restrict)
+- amount: decimal(14,2) NOT NULL DEFAULT 0.00
+- spent: decimal(14,2) NOT NULL DEFAULT 0.00 -- cached
+- created_at, updated_at
+- unique: (user_id, month, category_id)
+
+Table: budget_alerts
+- id: bigint PK
+- budget_id: bigint FK -> budgets.id (on delete cascade)
+- thresholds: json NOT NULL -- e.g., [50,75,90]
+- channels: json NOT NULL -- e.g., ['in_app','email']
+- last_alerted: json NULL -- timestamps per threshold
+- created_at, updated_at
+
+Table: imports
+- id: bigint PK
+- user_id: bigint FK -> users.id (cascade)
+- filename: varchar(255) NOT NULL
+- status: enum('uploaded','mapping','processing','completed','failed') NOT NULL DEFAULT 'uploaded'
+- rows_total: int NULL
+- rows_processed: int NOT NULL DEFAULT 0
+- errors: json NULL
+- metadata: json NULL (preset name, guesses)
+- created_at, updated_at
+
+Table: import_rows (optional for preview/partial)
+- id: bigint PK
+- import_id: bigint FK -> imports.id (cascade)
+- row_number: int
+- raw: json -- raw columns
+- parsed: json NULL
+- status: enum('pending','processed','error') DEFAULT 'pending'
+- error_message: text NULL
+- created_at, updated_at
+
+Table: reports
+- id: bigint PK
+- user_id: bigint FK -> users.id
+- month: char(7) NOT NULL
+- format: enum('pdf','xlsx') NOT NULL
+- status: enum('queued','processing','ready','failed') DEFAULT 'queued'
+- file_path: varchar(255) NULL
+- file_size: int NULL
+- created_at, updated_at
+
+Table: ai_analyses
+- id: bigint PK
+- user_id: bigint FK -> users.id
+- scope: varchar(50) NOT NULL
+- input: json NOT NULL
+- result: json NULL
+- confidence: decimal(5,4) NULL
+- created_at, updated_at
+
+Table: recurring_rules
+- id: bigint PK
+- user_id: bigint FK -> users.id
+- interval: enum('daily','weekly','monthly','yearly') NOT NULL
+- day: tinyint NULL -- day of month for monthly
+- weekday: tinyint NULL -- day of week for weekly
+- amount: decimal(14,2) NOT NULL
+- type: enum('expense','income','transfer') NOT NULL
+- account_id: bigint FK -> accounts.id
+- category_id: bigint FK -> categories.id
+- auto_create: boolean DEFAULT true
+- next_run: date NULL
+- active: boolean DEFAULT true
+- metadata: json NULL
+- created_at, updated_at
+
+Table: attachments
+- id: bigint PK
+- user_id: bigint FK -> users.id
+- transaction_id: bigint NULL FK -> transactions.id (set null on delete)
+- file_path: varchar(255) NOT NULL -- encrypted path
+- mime_type: varchar(100) NOT NULL
+- size: int NOT NULL
+- ocr_job_id: bigint NULL
+- created_at, updated_at
+
+Table: ocr_jobs
+- id: bigint PK
+- attachment_id: bigint FK -> attachments.id
+- status: enum('queued','processing','completed','failed') DEFAULT 'queued'
+- result: json NULL
+- created_at, updated_at
+
+Table: devices
+- id: bigint PK
+- user_id: bigint FK -> users.id
+- name: varchar(191) NOT NULL
+- device_id: varchar(255) NOT NULL UNIQUE
+- device_token: varchar(255) NOT NULL
+- last_sync_at: timestamp NULL
+- created_at, updated_at
+
+Table: sync_logs
+- id: bigint PK
+- device_id: bigint FK -> devices.id
+- change_type: enum('create','update','delete')
+- entity: varchar(50)
+- payload: json
+- client_id: varchar(100) -- client-side uuid
+- timestamp: datetime
+- status: enum('applied','conflict','failed') DEFAULT 'applied'
+- created_at, updated_at
+
+Table: webhooks
+- id: bigint PK
+- user_id: bigint FK -> users.id
+- url: varchar(255) NOT NULL
+- events: json NOT NULL
+- secret: varchar(255) NULL
+- active: boolean DEFAULT true
+- created_at, updated_at
+
+Table: webhook_events
+- id: bigint PK
+- webhook_id: bigint FK -> webhooks.id
+- payload: json
+- status: enum('queued','sent','failed')
+- response_code: int NULL
+- created_at, updated_at
+
+Table: notifications
+- id: bigint PK
+- user_id: bigint FK -> users.id
+- type: varchar(100)
+- data: json
+- read_at: datetime NULL
+- created_at, updated_at
+
+Indexes & FK rules summary
+- All *_id columns: foreign keys with ON DELETE CASCADE for user-owned data where appropriate (accounts, transactions) except attachments -> transaction uses SET NULL.
+- Unique constraints: users.email; import_id + row_number unique; recurring_rules (user_id + id) naturally unique.
+- Indexes on common filters: (user_id, date) on transactions, (user_id, month) on budgets, (status) on imports/reports/ai_analyses for queue monitoring.
+
+Migration & Storage notes
+- Use Laravel migrations to add/enforce FK constraints and indexes.
+- Encrypt file paths and store files under /storage/app/private; serve via signed temporary URLs for downloads.
+- For export/report files, store metadata in reports.file_path and purge files via scheduled job per user setting.
+
+How Phase 2 ties into Phase 1 PRD (explicit mapping)
+- Recurring transactions and rules reduce time-to-entry (target: decrease TTE by 25% from Phase 1 goal <10s).
+- CSV import enhancements (presets, mapping persistence, import_rows) elevate CSV success rate to >=95%.
+- Attachments + OCR and AI microservice (local Python) provide richer, still-local AI insights (forecast, anomaly detection) without external AI APIs.
+- Device sync endpoints enable offline-first UX with conflict resolution for multi-device small multi-tenant use.
+- Queued GenerateReport job retained for large exports; admin purge & export retention manage storage on single VPS.
+- Notifications: Laravel Notifications remain primary; SMTP/FCM integrations added as optional channels per PRD.
+- Deployment still targets single Oracle Free Tier VPS; heavier tasks scheduled or queued to avoid resource spikes.
+- Security and privacy constraints preserved: all data on VPS, encrypted storage, export & delete flows implemented.
+
+Operational considerations & next steps (brief)
+- Implement feature toggles (recurring, OCR, Python microservice) to disable heavy features on limited VPS.
+- Prioritize unit & integration tests for sync, import and report jobs.
+- Plan one-off migration to add recurring_rules, attachments, devices tables.
+- Provide developer docs for deploying Python microservice with systemd / container on same VPS.
+
+If you want, I can:
+- Generate Laravel migration stubs for the new tables, or
+- Produce OpenAPI (Swagger) JSON for the documented endpoints to use with client code generation.
+
+---
+
+UI/UX Structure
+===============
+
+Main screens (mobile-first priority)
+- Onboarding (Sign up / Quick setup)
+- Dashboard (summary cards, charts, quick actions)
+- Fast Add Transaction (persistent FAB → modal / full screen quick entry)
+- Transactions List & Edit (filter/search, bulk actions)
+- CSV Import → Upload → Map → Process (preview + chunked progress)
+- Budgets (list, create/edit, alerts & detail)
+- Reports (request export, status, download)
+- AI Analyze (conversational panel + detail cards)
+- Accounts & Reconcile (account list, reconcile flow)
+- Settings & Data Management (language/currency, notifications, export/delete)
+- Notifications center & In-app alert drawer
+
+For each screen below: purpose, primary components, API hooks, important states, dev notes (validation, performance, accessibility).
+
+1) Onboarding
+- Purpose: capture name/email/password, monthly income, default account, optional CSV import.
+- Components: Form (name/email/password), Income input, Account select/quick-create, CSV import CTA.
+- API: POST /api/auth/register -> response token -> set auth & route to Dashboard or Import.
+- States: loading, validation errors, optional CSV upload preview.
+- Notes: default locale "id", currency "IDR". Minimal required fields to shorten signup time.
+
+2) Dashboard (critical)
+- Purpose: immediate snapshot — balance, income/expense, budgets progress, top categories, quick-add.
+- Components:
+  - Top bar: menu, notifications
+  - Summary cards: Balance, Income, Expense, Forecast next month
+  - Charts: Category breakdown (pie/stacked), Weekly trend (sparklines), Cashflow forecast (mini chart with CI)
+  - Budgets progress list (progress bar, %)
+  - Quick actions: + (Fast Add), Import CSV, Analyze (AI)
+- API:
+  - GET /api/dashboard/summary?month=YYYY-MM
+  - GET /api/dashboard/charts?month=YYYY-MM
+  - GET /api/notifications (pull)
+- States: loading skeletons, empty-state (no transactions), stale-data indicator
+- Notes:
+  - Use TanStack Query with keepPreviousData:true for month switch.
+  - Render numbers as strings; format with Intl.NumberFormat('id-ID', {currency: 'IDR'}).
+  - Charts get preprocessed server data; client only renders.
+  - Keep chart library lightweight (Chart.js or -tiny). Avoid heavy Fourier transforms on client.
+  - Accessibility: cards focusable, descriptive aria-labels for charts.
+
+3) Fast Add Transaction (critical)
+- Purpose: enter a common transaction in <10s.
+- Two patterns: Modal (for single-tap add) + Full-screen quick form for power users.
+- Components:
+  - Amount input (numeric keyboard, quick presets like 5k/10k buttons)
+  - Account select (default last used)
+  - Type toggle (expense|income|transfer)
+  - Category auto-suggest (last used + favorites + search)
+  - Date (default today; quick +/- buttons)
+  - Note (optional)
+  - Tags (optional)
+  - Smart-defaults strip (recurring suggestion for repeat amounts)
+  - Save & Undo toast
+- API:
+  - POST /api/transactions -> optimistic UI update (append to cache)
+  - GET /api/categories for suggestions
+- States: saving, saved (toast), validation errors, offline queue (Phase 2)
+- Notes:
+  - Prefill: lastCategory, lastAccount, recurring_rule suggestion.
+  - Keyboard: enter = save, swipe down = close modal.
+  - Use optimistic updates with rollback on failure. Return server id to reconcile.
+  - Validation: amount > 0, account_id present, date valid.
+  - Accessibility: amount field labelled, stepper buttons large tap targets.
+  - Tailwind helpers: .fixed .inset-x-2 .bottom-4 for FAB; modal: .bg-white .rounded-lg .p-4 .shadow-lg
+
+4) Transactions List & Edit
+- Purpose: view, search, filter, edit transactions, soft-delete.
+- Components:
+  - Filter bar (date range, account, category)
+  - Paginated list with grouped-by-day headings
+  - Row actions: edit, duplicate, attach receipt, delete
+  - Bulk actions: select multiple -> mark imported/merge into account
+- API:
+  - GET /api/transactions?from=&to=&account=&category=
+  - PUT /api/transactions/{id}
+  - DELETE /api/transactions/{id}
+- States: loading, no results, offline edits queue
+- Notes:
+  - Use cursor or page pagination for mobile.
+  - Row swipe left: delete; swipe right: edit/quick-categorize.
+  - Show imported badge & external_id if present.
+
+5) CSV Import (critical)
+- Purpose: map columns, preview, start chunked processing, monitor progress.
+- Flow: Upload file -> Server stores -> Show preview -> Map columns -> Start mapping job -> Poll status
+- Components:
+  - Upload area (drag/drop or file picker; show presets dropdown)
+  - Preview table (first N rows)
+  - Column mapping UI (dropdown per field; date format picker; has_header toggle)
+  - Rules panel (match strings -> category)
+  - Start processing CTA + progress screen
+  - Import status screen with errors list & retry mapping
+- API:
+  - POST /api/imports/csv (multipart) -> returns import_id
+  - GET /api/imports/{id}/preview
+  - POST /api/imports/{id}/map -> enqueues job
+  - GET /api/imports/{id}/status (poll)
+- States: uploading, mapping, processing, completed, failed
+- Notes:
+  - Chunked upload + server-side chunked processing; show rows_processed / rows_total.
+  - Preserve user's last mappings (localStorage) for quick future imports.
+  - Validate amount parsing; show parse errors per row.
+  - Use lightweight CSV parser client-side to show preview without sending whole file if bandwidth is poor.
+  - Accessibility: mapping dropdowns labelled; large touch targets.
+
+6) Budgets & Alerts
+- Purpose: set monthly budgets by category, show progress and trigger alerts.
+- Components:
+  - Budgets list for selected month
+  - Create/Edit budget modal
+  - Threshold toggles (50/75/90) & channels
+  - Budget detail: transactions contributing to spent
+- API:
+  - GET /api/budgets?month=YYYY-MM
+  - POST /api/budgets
+  - POST /api/budgets/{id}/alerts
+- Notes:
+  - Show progress bar with color states (normal / warning / critical).
+  - Provide "what-if" quick action: reduce category by X → show impact on total.
+  - In-app alert drawer + optional email/FCM.
+
+7) Reports
+- Purpose: request monthly PDF/XLSX report; show queued job status and download when ready.
+- Components:
+  - Month selector, format selector, Request report CTA
+  - Reports list with status and download link
+- API:
+  - POST /api/reports
+  - GET /api/reports/{id}/status
+- States: queued, processing, ready, failed
+- Notes:
+  - For small exports allow synchronous quick export endpoint (limited size).
+  - Show ETA and progress % if available.
+
+8) AI Analyze (critical)
+- Purpose: conversational insights, forecasts, anomalies, recommendations (Bahasa + IDR).
+- Components:
+  - Conversational panel: message list + input; quick prompts
+  - Summary cards: forecasts per category, anomalies list, top recommendations with impact numbers
+  - "Drill into" transaction(s) from anomaly card
+- API:
+  - POST /api/ai/analyze (fast mode) -> returns analysis object
+  - GET /api/ai/analyses/{id} to fetch stored result
+- States: thinking/loading indicator, cached last result, follow-up queries appended to existing analysis
+- Notes:
+  - Use local microservice; send small scope payload (month/categories/horizon) not entire DB.
+  - Show confidence metric and explainability note (why recommended).
+  - Rate-limit analyze actions; queue heavy training/training-requested tasks.
+  - Prefer concise Bahasa responses; front-end handles follow-ups as conversational context.
+
+9) Accounts & Reconcile
+- Purpose: manage accounts & reconcile balances.
+- Components:
+  - Account list (current_balance)
+  - Reconcile modal: reported_balance, previous_balance, adjustments preview
+- API:
+  - GET /api/accounts
+  - POST /api/accounts/{id}/reconcile
+- Notes:
+  - Show potential adjustment transactions before applying.
+
+10) Settings & Data Management
+- Purpose: language/currency, notifications, export/delete flows
+- Components:
+  - Switch language (id default), currency (IDR fixed), notification toggles
+  - Data export & delete modal (export first, confirm)
+- API:
+  - POST /api/settings
+  - POST /api/account/export
+  - DELETE /api/account
+- Notes:
+  - Strong confirmation for delete; show backup reminder.
+
+Programmer Handoff checklist (practical)
+- Use Tailwind utility classes and component tokens for spacing & typographic scale.
+- Use TanStack Query for caching and queuing optimistic updates.
+- Prefetch categories & last-used account on app load to speed Fast Add time.
+- Keep JS bundles minimal; code-split charts & AI chat components.
+- Offline: queue transactions locally (Phase 2) using localforage; sync with /api/sync/push.
+- Localization: store all UI strings in i18n files (id.json default). Dates/nums formatted client-side.
+- Accessibility: provide aria-labels and focus management for modals, form errors, and toast toasts.
+- Error handling: display API error.error messages; show retry for background jobs (imports/reports).
+- Security: restrict file downloads via signed URLs; store files encrypted; show ephemeral links.
+
+ASCII Wireframes (mobile-first)
+- 3 critical screens: Dashboard (mobile), Fast Add modal (compact), CSV Import Mapping preview.
+- Use Bahasa Indonesia labels and clear element names.
+
+1) Dashboard (mobile)
+``` 
++----------------------------------------+
+| ← Menu     Dompet: Rp 123.000   🔔  |
++----------------------------------------+
+| Ringkasan (Bulan: Mei 2026)           |
+| [Saldo] Rp 123.000                    |
+| [Pemasukan] Rp 3.500.000  [Pengeluaran]|
+|                Rp 2.100.000           |
++----------------------------------------+
+| Anggaran:                             
+| Makan   ▓▓▓▓▓▓▓░  65%  Rp 325.000     >
+| Transport ▓▓▓▓░  40%  Rp 120.000      >
++----------------------------------------+
+| Grafik: Pengeluaran per kategori       |
+|  • Makan 30%  • Transport 12%  • Lain |
+|  [▶ Lihat detail]                      |
++----------------------------------------+
+| Trend Mingguan ↓                       |
+| Mon ▒ ▒ ▒ Tue ▒ ▒ ▒ Wed ▒ ▒ ▒ Thu ...  |
++----------------------------------------+
+| [ + ] Tambah  [Import CSV] [Analisis]  |
++----------------------------------------+
+| Footer: Transactions (swipe up to open)|
++----------------------------------------+
+```
+
+Implementation notes for Dashboard wireframe:
+- Summary cards are tappable; use skeletons while loading GET /api/dashboard/summary.
+- Quick-add FAB (+) pinned bottom-right (.fixed .bottom-6 .right-4).
+- Charts lazy-load when visible; use IntersectionObserver.
+
+2) Fast Add Transaction (modal compact)
+``` 
+/-- Fast Add (modal) -------------------\
+| ×    Tambah Cepat                     |
+|                                        |
+| Jumlah         [Rp 25.000]  [5k][10k]  |
+| Akun           ▼ E-Wallet (Jenius)     |
+| Tipe           ◉ Pengeluaran  ◯ Pemasukan|
+| Kategori       ▼ Makan/Minum           |
+| Tanggal        [2026-05-04]  (-1) (+1)  |
+| Catatan        [Makan siang]           |
+| Tags           #teman  #kantin         |
+|                                        |
+| [Simpan]   [Simpan & Ulangi]           |
+\----------------------------------------/
+```
+
+Implementation notes for Fast Add:
+- Amount input uses numeric keyboard; include quick preset buttons for common values.
+- Category dropdown includes "last used" pinned at top.
+- Pressing Save triggers optimistic mutation to POST /api/transactions and shows toast "Tersimpan • Undo".
+- If offline, enqueue locally and mark row with syncing indicator.
+
+3) CSV Import Mapping (preview & mapping)
+```
+/-- CSV Import: Map Kolom ---------------\
+| ← Kembali   File: transactions_05.csv  |
+| Preset: [BCA]  Has header: [x]         |
++----------------------------------------+
+| PREVIEW (10 baris)                     |
+| # | col1      | col2       | col3 |col4|
+| 1 | 01/05/2026| Debit      | Makan|25000|
+| 2 | 02/05/2026| Credit     | Gaji |350000|
+| ...                                    |
++----------------------------------------+
+| Mapping:                               
+| Tanggal   ▼ [col1]   (format d/m/Y)     |
+| Keterangan▼ [col3]                      |
+| Jumlah    ▼ [col4]   (negatives => expense)|
+| Tipe      ▼ [col2]   (Debit/Credit map) |
+| Akun      ▼ [Pilih akun]                |
++----------------------------------------+
+| Rules:  [If description contains 'Makan' -> Category: Makan] |
++----------------------------------------+
+| [Preview parsed rows]  [Mulai Proses]   |
++----------------------------------------+
+| Status: mapping → processing → completed |
+\----------------------------------------/
+```
+
+Implementation notes for CSV Import:
+- Use local preview parsing (FileReader + PapaParse) to avoid sending whole file on mobile if possible.
+- Allow user to set date_format; auto-detect common formats and suggest mapping.
+- POST /api/imports/csv first (multipart) to upload; then POST /api/imports/{id}/map with mapping rules.
+- Poll /api/imports/{id}/status for progress and show rows_processed.
+
+End of deliverable.
