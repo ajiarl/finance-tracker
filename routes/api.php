@@ -29,6 +29,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('reports/{report}/download', [ReportController::class, 'download'])->name('reports.download');
     Route::get('settings', [SettingsController::class, 'show']);
     Route::patch('settings', [SettingsController::class, 'update']);
+    Route::post('accounts/{account}/reconcile', [AccountController::class, 'reconcile'])
+        ->name('accounts.reconcile');
 
     Route::apiResource('accounts',     AccountController::class);
     Route::apiResource('categories', CategoryController::class)

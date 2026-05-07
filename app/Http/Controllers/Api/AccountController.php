@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Account;
+use App\Models\Transaction;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AccountController extends Controller
 {
@@ -64,5 +67,69 @@ class AccountController extends Controller
         }
         $account->delete();
         return response()->json(['message' => 'Akun berhasil dihapus.']);
+    }
+
+    public function reconcile(Request $request, Account $account): JsonResponse
+    {
+        if ($account->user_id !== $request->user()->id) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
+        if (! $account->is_active) {
+            return response()->json(['message' => 'Akun tidak aktif.'], 422);
+        }
+
+        $validated = $request->validate([
+            'actual_balance' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
+        ]);
+
+        $actualBalance = (float) $validated['actual_balance'];
+        $currentBalance = (float) $account->balance;
+        $difference = round($actualBalance - $currentBalance, 2);
+
+        if ($difference === 0.0) {
+            return response()->json([
+                'message' => 'Saldo sudah sesuai, tidak ada penyesuaian diperlukan.',
+                'data' => ['balance' => $account->balance],
+            ]);
+        }
+
+        $transaction = DB::transaction(function () use ($account, $actualBalance, $currentBalance, $difference, $request) {
+            $account->update(['balance' => $actualBalance]);
+
+            return Transaction::create([
+                'user_id' => $request->user()->id,
+                'account_id' => $account->id,
+                'category_id' => null,
+                'type' => $difference > 0 ? 'income' : 'expense',
+                'amount' => abs($difference),
+                'description' => 'Penyesuaian Saldo Sistem',
+                'transaction_date' => now()->toDateString(),
+                'notes' => sprintf(
+                    'Rekonsiliasi: saldo lama %s, saldo baru %s, selisih %s',
+                    number_format($currentBalance, 2),
+                    number_format($actualBalance, 2),
+                    ($difference > 0 ? '+' : '') . number_format($difference, 2)
+                ),
+            ]);
+        });
+
+        return response()->json([
+            'message' => 'Rekonsiliasi berhasil.',
+            'data' => [
+                'account' => [
+                    'id' => $account->id,
+                    'name' => $account->name,
+                    'old_balance' => $currentBalance,
+                    'new_balance' => $actualBalance,
+                    'difference' => $difference,
+                ],
+                'adjustment_transaction' => [
+                    'id' => $transaction->id,
+                    'type' => $transaction->type,
+                    'amount' => $transaction->amount,
+                ],
+            ],
+        ], 201);
     }
 }
