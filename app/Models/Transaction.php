@@ -20,11 +20,13 @@ class Transaction extends Model
         'transaction_date',
         'reference_number',
         'notes',
+        'tags',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'transaction_date' => 'date',
+        'tags' => 'array',
     ];
 
     public function scopeForUser($query, int $userId)

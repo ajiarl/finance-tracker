@@ -4,24 +4,33 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class CategoryController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
-        $query = Category::where('user_id', $request->user()->id);
+        $categories = Category::query()
+            ->where(function ($query) use ($request) {
+                $query->where('user_id', $request->user()->id)
+                    ->orWhereNull('user_id');
+            })
+            ->where('is_active', true)
+            ->when($request->filled('type'), function ($query) use ($request) {
+                $query->where('type', $request->type);
+            })
+            ->orderByRaw('user_id IS NOT NULL')
+            ->orderBy('type')
+            ->orderBy('name')
+            ->get();
 
-        if ($request->has('type')) {
-            $query->where('type', $request->type);
-        }
-
-        return response()->json(['data' => $query->get()]);
+        return response()->json(['data' => $categories]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'name'  => 'required|string|max:100',
             'type'  => 'required|in:income,expense',
             'icon'  => 'nullable|string|max:50',
@@ -29,32 +38,34 @@ class CategoryController extends Controller
         ]);
 
         $category = Category::create([
+            ...$validated,
             'user_id' => $request->user()->id,
-            'name'    => $request->name,
-            'type'    => $request->type,
-            'icon'    => $request->icon,
-            'color'   => $request->color,
+            'is_active' => true,
         ]);
 
         return response()->json(['data' => $category], 201);
     }
 
-    public function show(Request $request, Category $category)
+    public function show(Request $request, Category $category): JsonResponse
     {
-        if ($category->user_id !== $request->user()->id) {
+        if ($category->user_id !== $request->user()->id && ! is_null($category->user_id)) {
             return response()->json(['error' => 'Forbidden'], 403);
         }
 
         return response()->json(['data' => $category]);
     }
 
-    public function update(Request $request, Category $category)
+    public function update(Request $request, Category $category): JsonResponse
     {
-        if ($category->user_id !== $request->user()->id) {
-            return response()->json(['error' => 'Forbidden'], 403);
+        if (is_null($category->user_id)) {
+            return response()->json(['message' => 'Kategori sistem tidak dapat diubah.'], 403);
         }
 
-        $request->validate([
+        if ($category->user_id !== $request->user()->id) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
+        $validated = $request->validate([
             'name'      => 'sometimes|string|max:100',
             'type'      => 'sometimes|in:income,expense',
             'icon'      => 'nullable|string|max:50',
@@ -62,19 +73,23 @@ class CategoryController extends Controller
             'is_active' => 'sometimes|boolean',
         ]);
 
-        $category->update($request->only(['name', 'type', 'icon', 'color', 'is_active']));
+        $category->update($validated);
 
         return response()->json(['data' => $category]);
     }
 
-    public function destroy(Request $request, Category $category)
+    public function destroy(Request $request, Category $category): JsonResponse
     {
+        if (is_null($category->user_id)) {
+            return response()->json(['message' => 'Kategori sistem tidak dapat dihapus.'], 403);
+        }
+
         if ($category->user_id !== $request->user()->id) {
-            return response()->json(['error' => 'Forbidden'], 403);
+            return response()->json(['message' => 'Forbidden.'], 403);
         }
 
         $category->delete();
 
-        return response()->json(['message' => 'Kategori berhasil dihapus.']);
+        return response()->json(null, 204);
     }
 }

@@ -51,6 +51,8 @@ class TransactionController extends Controller
             'transaction_date' => 'required|date',
             'reference_number' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
+            'tags' => 'nullable|array',
+            'tags.*' => 'string|max:50',
         ]);
 
         $account = $this->getOwnedAccount($request->user()->id, (int) $validated['account_id']);
@@ -58,7 +60,7 @@ class TransactionController extends Controller
             return response()->json(['error' => 'Account not found.'], 404);
         }
 
-        $category = $this->resolveOwnedCategory($request->user()->id, $validated['category_id'] ?? null);
+        $category = $this->resolveAccessibleCategory($request->user()->id, $validated['category_id'] ?? null);
         if (($validated['category_id'] ?? null) && ! $category) {
             return response()->json(['error' => 'Category not found.'], 404);
         }
@@ -78,6 +80,7 @@ class TransactionController extends Controller
                 'transaction_date' => $validated['transaction_date'],
                 'reference_number' => $validated['reference_number'] ?? null,
                 'notes' => $validated['notes'] ?? null,
+                'tags' => $validated['tags'] ?? null,
             ]);
 
             $this->applyBalanceDelta($account, $validated['type'], (float) $validated['amount']);
@@ -112,6 +115,8 @@ class TransactionController extends Controller
             'transaction_date' => 'sometimes|date',
             'reference_number' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
+            'tags' => 'nullable|array',
+            'tags.*' => 'string|max:50',
         ]);
 
         $newAccount = isset($validated['account_id'])
@@ -126,9 +131,14 @@ class TransactionController extends Controller
             ? $validated['category_id']
             : $transaction->category_id;
 
-        $newCategory = $this->resolveOwnedCategory($request->user()->id, $newCategoryId);
+        $newCategory = $this->resolveAccessibleCategory($request->user()->id, $newCategoryId);
         if ($newCategoryId && ! $newCategory) {
             return response()->json(['error' => 'Category not found.'], 404);
+        }
+
+        $newType = $validated['type'] ?? $transaction->type;
+        if ($newCategory && $newCategory->type !== $newType) {
+            return response()->json(['error' => 'Kategori tidak sesuai tipe transaksi'], 422);
         }
 
         DB::transaction(function () use ($transaction, $validated, $newAccount, $newCategoryId) {
@@ -144,6 +154,7 @@ class TransactionController extends Controller
                 'transaction_date' => $validated['transaction_date'] ?? $transaction->transaction_date,
                 'reference_number' => array_key_exists('reference_number', $validated) ? $validated['reference_number'] : $transaction->reference_number,
                 'notes' => array_key_exists('notes', $validated) ? $validated['notes'] : $transaction->notes,
+                'tags' => array_key_exists('tags', $validated) ? $validated['tags'] : $transaction->tags,
             ]);
 
             $transaction->refresh();
@@ -173,13 +184,19 @@ class TransactionController extends Controller
         return Account::where('user_id', $userId)->find($accountId);
     }
 
-    private function resolveOwnedCategory(int $userId, ?int $categoryId): ?Category
+    private function resolveAccessibleCategory(int $userId, ?int $categoryId): ?Category
     {
         if (! $categoryId) {
             return null;
         }
 
-        return Category::where('user_id', $userId)->find($categoryId);
+        return Category::query()
+            ->where('id', $categoryId)
+            ->where(function ($query) use ($userId) {
+                $query->where('user_id', $userId)
+                    ->orWhereNull('user_id');
+            })
+            ->first();
     }
 
     private function applyBalanceDelta(Account $account, string $type, float $amount): void
