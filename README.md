@@ -1,58 +1,241 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Finance Tracker API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Backend Laravel untuk aplikasi pencatatan keuangan pribadi.
 
-## About Laravel
-
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
-
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Menjalankan Proyek
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
+php artisan db:seed
+php artisan serve
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Base URL lokal:
 
-## Contributing
+```text
+http://127.0.0.1:8000
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Autentikasi
 
-## Code of Conduct
+Endpoint publik:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+- `POST /api/register`
+- `POST /api/login`
 
-## Security Vulnerabilities
+Endpoint lain memakai token Sanctum:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```http
+Accept: application/json
+Authorization: Bearer <token>
+```
 
-## License
+Endpoint auth:
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- `GET /api/user`
+- `POST /api/logout`
+
+## Ringkasan Endpoint
+
+### Accounts
+
+- `GET /api/accounts`
+- `POST /api/accounts`
+- `GET /api/accounts/{id}`
+- `PUT /api/accounts/{id}`
+- `DELETE /api/accounts/{id}`
+- `POST /api/accounts/{account}/reconcile`
+
+Contoh create:
+
+```json
+{
+  "name": "BCA",
+  "type": "bank",
+  "balance": 0
+}
+```
+
+Contoh reconcile:
+
+```json
+{
+  "actual_balance": 150000
+}
+```
+
+Perilaku endpoint reconcile:
+
+- hanya bisa dipakai untuk akun milik user login
+- akun nonaktif akan ditolak
+- jika `actual_balance` sama dengan saldo saat ini, response `200` dan tidak ada transaksi baru
+- jika `actual_balance` lebih besar, sistem membuat transaksi penyesuaian bertipe `income`
+- jika `actual_balance` lebih kecil, sistem membuat transaksi penyesuaian bertipe `expense`
+- proses update saldo dan pembuatan transaksi dibungkus `DB::transaction`
+
+### Categories
+
+- `GET /api/categories`
+- `POST /api/categories`
+- `PUT /api/categories/{id}`
+- `DELETE /api/categories/{id}`
+
+Perilaku endpoint:
+
+- `GET /api/categories` mengembalikan kategori aktif milik user dan kategori sistem
+- kategori sistem memakai `user_id = null`
+- kategori sistem tidak bisa diubah atau dihapus oleh user biasa
+- `user_id` tidak dikirim dari request, selalu diambil dari user login
+- filter tipe tersedia lewat `?type=income` dan `?type=expense`
+
+Contoh create:
+
+```json
+{
+  "name": "Jajan Kampus",
+  "type": "expense",
+  "icon": "coffee",
+  "color": "#F59E0B"
+}
+```
+
+Validasi penting:
+
+- `name`: wajib, string, maks 100 karakter
+- `type`: `income` atau `expense`
+- `icon`: nullable, string, maks 50 karakter
+- `color`: nullable, harus format hex `#RRGGBB`
+
+### Transactions
+
+- `GET /api/transactions`
+- `POST /api/transactions`
+- `GET /api/transactions/{id}`
+- `PUT /api/transactions/{id}`
+- `DELETE /api/transactions/{id}`
+
+Filter yang tersedia:
+
+- `account_id`
+- `category_id`
+- `type`
+- `date_from`
+- `date_to`
+
+Perilaku endpoint:
+
+- transaksi boleh memakai kategori milik user atau kategori sistem
+- `type` transaksi harus cocok dengan `type` kategori
+- `tags` disimpan sebagai JSON dan otomatis dikembalikan sebagai array
+
+Contoh create:
+
+```json
+{
+  "account_id": 3,
+  "category_id": 4,
+  "type": "expense",
+  "amount": 15000,
+  "description": "Makan siang",
+  "transaction_date": "2026-05-07",
+  "reference_number": "TRX-001",
+  "notes": "Beli di kantin",
+  "tags": ["makan", "kantin"]
+}
+```
+
+Contoh update:
+
+```json
+{
+  "notes": "Update catatan transaksi",
+  "tags": ["makan", "siang", "kampus"]
+}
+```
+
+Validasi penting:
+
+- `account_id`: wajib saat create, harus milik user login
+- `category_id`: nullable, boleh kategori user atau kategori sistem
+- `type`: `income`, `expense`, atau `transfer`
+- `amount`: numerik dan lebih dari 0
+- `transaction_date`: tanggal valid
+- `tags`: nullable array
+- `tags.*`: string dengan panjang maksimum 50 karakter
+
+### Budgets
+
+- `GET /api/budgets`
+- `POST /api/budgets`
+- `GET /api/budgets/{id}`
+- `PUT /api/budgets/{id}`
+- `DELETE /api/budgets/{id}`
+
+### Settings
+
+- `GET /api/settings`
+- `PATCH /api/settings`
+
+Perilaku endpoint:
+
+- mengembalikan preferensi aktif user login
+- mengembalikan daftar `supported_locales` dan `supported_currencies`
+- hanya field `locale` dan `currency` yang bisa diupdate
+
+Contoh update:
+
+```json
+{
+  "locale": "en",
+  "currency": "USD"
+}
+```
+
+Validasi penting:
+
+- `locale`: salah satu dari `id`, `en`
+- `currency`: salah satu dari `IDR`, `USD`, `EUR`, `SGD`, `MYR`
+- payload kosong akan ditolak dengan `422`
+
+### Dashboard
+
+- `GET /api/dashboard`
+- `GET /api/dashboard/charts`
+
+### Imports
+
+- `POST /api/imports/csv`
+- `GET /api/imports/{import}/status`
+- `POST /api/imports/{import}/map`
+
+### Reports
+
+- `POST /api/reports`
+- `GET /api/reports/{report}/status`
+- `GET /api/reports/{report}/download`
+
+## Seeder Default
+
+Seeder kategori sistem:
+
+```bash
+php artisan db:seed --class=DefaultCategorySeeder
+```
+
+Seeder ini membuat kategori default seperti `Makanan & Minuman`, `Transportasi`, `Belanja`, `Gaji`, `Freelance`, dan lainnya dengan `user_id = null`.
+
+## Dokumentasi Tes
+
+Koleksi request manual:
+
+- [transactions-api.http](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/transactions-api.http)
+
+Automated test:
+
+- [AccountControllerTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/AccountControllerTest.php)
+- [CategoryControllerTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/CategoryControllerTest.php)
+- [SettingsControllerTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/SettingsControllerTest.php)
+- [TransactionControllerTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/TransactionControllerTest.php)

@@ -1,9 +1,10 @@
 @baseUrl = http://127.0.0.1:8000
 @token = PASTE_BEARER_TOKEN_HERE
-@accountId = 1
-@incomeCategoryId = 1
-@expenseCategoryId = 2
-@transactionId = 1
+@accountId = 3
+@incomeCategoryId = 3
+@expenseCategoryId = 4
+@systemCategoryId = 5
+@transactionId = 8
 
 ### Login
 POST {{baseUrl}}/api/login
@@ -11,9 +12,21 @@ Accept: application/json
 Content-Type: application/json
 
 {
-  "email": "test@email.com",
-  "password": "password123"
+  "email": "test@example.com",
+  "password": "password"
 }
+
+### Show current user
+GET {{baseUrl}}/api/user
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Logout
+POST {{baseUrl}}/api/logout
+Accept: application/json
+Authorization: Bearer {{token}}
+
+{}
 
 ### Create account
 POST {{baseUrl}}/api/accounts
@@ -32,6 +45,36 @@ GET {{baseUrl}}/api/accounts
 Accept: application/json
 Authorization: Bearer {{token}}
 
+### Reconcile account with matching balance
+POST {{baseUrl}}/api/accounts/{{accountId}}/reconcile
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "actual_balance": 150000
+}
+
+### Reconcile account with higher actual balance
+POST {{baseUrl}}/api/accounts/{{accountId}}/reconcile
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "actual_balance": 175000
+}
+
+### Reconcile account with lower actual balance
+POST {{baseUrl}}/api/accounts/{{accountId}}/reconcile
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "actual_balance": 125000
+}
+
 ### Create expense category
 POST {{baseUrl}}/api/categories
 Accept: application/json
@@ -39,13 +82,13 @@ Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "name": "Makan",
+  "name": "Jajan Kampus",
   "type": "expense",
-  "icon": "🍜",
-  "color": "#FF5733"
+  "icon": "coffee",
+  "color": "#F59E0B"
 }
 
-### List categories
+### List all active categories available to the user
 GET {{baseUrl}}/api/categories
 Accept: application/json
 Authorization: Bearer {{token}}
@@ -60,35 +103,85 @@ GET {{baseUrl}}/api/categories?type=expense
 Accept: application/json
 Authorization: Bearer {{token}}
 
-### Show current user
-GET {{baseUrl}}/api/user
+### Create category with invalid color
+POST {{baseUrl}}/api/categories
 Accept: application/json
-Authorization: Bearer {{token}}
-
-### Logout
-POST {{baseUrl}}/api/logout
-Accept: application/json
+Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
+  "name": "Warna Salah",
+  "type": "expense",
+  "icon": "coffee",
+  "color": "1234567"
 }
+
+### Try updating a system category
+PATCH {{baseUrl}}/api/categories/{{systemCategoryId}}
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "Coba Edit Sistem"
+}
+
+### Try deleting a system category
+DELETE {{baseUrl}}/api/categories/{{systemCategoryId}}
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Show current settings
+GET {{baseUrl}}/api/settings
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Update settings
+PATCH {{baseUrl}}/api/settings
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "locale": "en",
+  "currency": "USD"
+}
+
+### Update settings with unsupported values
+PATCH {{baseUrl}}/api/settings
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "locale": "jp",
+  "currency": "JPY"
+}
+
+### Update settings with empty payload
+PATCH {{baseUrl}}/api/settings
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{}
 
 ### List all transactions
 GET {{baseUrl}}/api/transactions
 Accept: application/json
 Authorization: Bearer {{token}}
 
-### Filter by type
+### Filter transactions by type
 GET {{baseUrl}}/api/transactions?type=expense
 Accept: application/json
 Authorization: Bearer {{token}}
 
-### Filter by date range
+### Filter transactions by date range
 GET {{baseUrl}}/api/transactions?date_from=2026-05-01&date_to=2026-05-31
 Accept: application/json
 Authorization: Bearer {{token}}
 
-### Filter by account
+### Filter transactions by account
 GET {{baseUrl}}/api/transactions?account_id={{accountId}}
 Accept: application/json
 Authorization: Bearer {{token}}
@@ -98,7 +191,7 @@ GET {{baseUrl}}/api/transactions/{{transactionId}}
 Accept: application/json
 Authorization: Bearer {{token}}
 
-### Create income
+### Create income transaction
 POST {{baseUrl}}/api/transactions
 Accept: application/json
 Content-Type: application/json
@@ -109,12 +202,13 @@ Authorization: Bearer {{token}}
   "category_id": {{incomeCategoryId}},
   "type": "income",
   "amount": 5000000,
-  "description": "Gaji bulan Mei",
-  "transaction_date": "2026-05-06",
-  "notes": "Transfer dari kantor"
+  "description": "Gaji bulanan",
+  "transaction_date": "2026-05-07",
+  "notes": "Transfer perusahaan",
+  "tags": ["gaji", "bulanan"]
 }
 
-### Create expense
+### Create expense transaction
 POST {{baseUrl}}/api/transactions
 Accept: application/json
 Content-Type: application/json
@@ -124,21 +218,65 @@ Authorization: Bearer {{token}}
   "account_id": {{accountId}},
   "category_id": {{expenseCategoryId}},
   "type": "expense",
-  "amount": 50000,
+  "amount": 15000,
   "description": "Makan siang",
-  "transaction_date": "2026-05-06"
+  "transaction_date": "2026-05-07",
+  "reference_number": "TRX-001",
+  "notes": "Beli di kantin",
+  "tags": ["makan", "kantin"]
 }
 
-### Update transaction
-PUT {{baseUrl}}/api/transactions/{{transactionId}}
+### Create expense transaction with system category
+POST {{baseUrl}}/api/transactions
 Accept: application/json
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "description": "Gaji bulan Mei sudah diupdate",
-  "amount": 5500000,
-  "transaction_date": "2026-05-06"
+  "account_id": {{accountId}},
+  "category_id": {{systemCategoryId}},
+  "type": "expense",
+  "amount": 25000,
+  "description": "Naik ojek",
+  "transaction_date": "2026-05-07",
+  "tags": ["transport"]
+}
+
+### Update transaction
+PATCH {{baseUrl}}/api/transactions/{{transactionId}}
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "notes": "Update catatan transaksi",
+  "tags": ["makan", "siang", "kampus"]
+}
+
+### Invalid tags format
+POST {{baseUrl}}/api/transactions
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "account_id": {{accountId}},
+  "category_id": {{expenseCategoryId}},
+  "type": "expense",
+  "amount": 12000,
+  "transaction_date": "2026-05-07",
+  "tags": "makan"
+}
+
+### Mismatched transaction type and category type
+PATCH {{baseUrl}}/api/transactions/{{transactionId}}
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "type": "income",
+  "category_id": {{expenseCategoryId}}
 }
 
 ### Delete transaction
@@ -160,7 +298,7 @@ Authorization: Bearer {{token}}
   "account_id": {{accountId}},
   "type": "expense",
   "amount": -999,
-  "transaction_date": "2026-05-06"
+  "transaction_date": "2026-05-07"
 }
 
 ### Edge case: wrong type
@@ -173,5 +311,5 @@ Authorization: Bearer {{token}}
   "account_id": {{accountId}},
   "type": "belanja",
   "amount": 10000,
-  "transaction_date": "2026-05-06"
+  "transaction_date": "2026-05-07"
 }
