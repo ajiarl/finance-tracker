@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ImportController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\TransactionController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SettingsController;
 
 // Public routes
@@ -29,6 +30,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('reports/{report}/download', [ReportController::class, 'download'])->name('reports.download');
     Route::get('settings', [SettingsController::class, 'show']);
     Route::patch('settings', [SettingsController::class, 'update']);
+    Route::prefix('notifications')->controller(NotificationController::class)
+        ->name('notifications.')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::patch('read-all', 'markAllAsRead')->name('read-all');
+            Route::patch('{id}/read', 'markAsRead')->name('read');
+        });
     Route::post('accounts/{account}/reconcile', [AccountController::class, 'reconcile'])
         ->name('accounts.reconcile');
 

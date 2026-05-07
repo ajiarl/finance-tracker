@@ -166,6 +166,21 @@ Authorization: Bearer {{token}}
 
 {}
 
+### List notifications
+GET {{baseUrl}}/api/notifications
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Mark all notifications as read
+PATCH {{baseUrl}}/api/notifications/read-all
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Mark a single notification as read
+PATCH {{baseUrl}}/api/notifications/1/read
+Accept: application/json
+Authorization: Bearer {{token}}
+
 ### List all transactions
 GET {{baseUrl}}/api/transactions
 Accept: application/json

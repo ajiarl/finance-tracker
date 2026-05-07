@@ -200,6 +200,58 @@ Validasi penting:
 - `currency`: salah satu dari `IDR`, `USD`, `EUR`, `SGD`, `MYR`
 - payload kosong akan ditolak dengan `422`
 
+### Notifications
+
+- `GET /api/notifications`
+- `PATCH /api/notifications/read-all`
+- `PATCH /api/notifications/{id}/read`
+
+Perilaku endpoint:
+
+- semua endpoint hanya mengakses notifikasi milik user login
+- list notifikasi diurutkan dari yang terbaru
+- response list menyertakan `meta.total` dan `meta.unread_count`
+- `read-all` harus dideklarasikan sebelum `{id}/read` di route agar tidak tertabrak parameter dinamis
+
+Contoh response list:
+
+```json
+{
+  "data": [
+    {
+      "id": 2,
+      "title": "Report Ready",
+      "message": "Laporan bulanan siap diunduh.",
+      "type": "success",
+      "is_read": false,
+      "read_at": null,
+      "created_at": "2026-05-07T00:42:51.000000Z"
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "unread_count": 1
+  }
+}
+```
+
+Contoh mark satu:
+
+```json
+{
+  "message": "Notifikasi ditandai sudah dibaca."
+}
+```
+
+Contoh mark semua:
+
+```json
+{
+  "message": "Semua notifikasi ditandai sudah dibaca.",
+  "updated_count": 1
+}
+```
+
 ### Dashboard
 
 - `GET /api/dashboard`
@@ -237,5 +289,6 @@ Automated test:
 
 - [AccountControllerTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/AccountControllerTest.php)
 - [CategoryControllerTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/CategoryControllerTest.php)
+- [NotificationControllerTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/NotificationControllerTest.php)
 - [SettingsControllerTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/SettingsControllerTest.php)
 - [TransactionControllerTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/TransactionControllerTest.php)
