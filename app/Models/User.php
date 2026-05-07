@@ -15,12 +15,18 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'locale',
+        'currency',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
     ];
+
+    public const SUPPORTED_LOCALES = ['id', 'en'];
+
+    public const SUPPORTED_CURRENCIES = ['IDR', 'USD', 'EUR', 'SGD', 'MYR'];
 
     protected function casts(): array
     {

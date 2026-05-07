@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ImportController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\TransactionController;
+use App\Http\Controllers\SettingsController;
 
 // Public routes
 Route::post('/register', [AuthController::class, 'register']);
@@ -26,6 +27,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('reports', [ReportController::class, 'store']);
     Route::get('reports/{report}/status', [ReportController::class, 'status']);
     Route::get('reports/{report}/download', [ReportController::class, 'download'])->name('reports.download');
+    Route::get('settings', [SettingsController::class, 'show']);
+    Route::patch('settings', [SettingsController::class, 'update']);
 
     Route::apiResource('accounts',     AccountController::class);
     Route::apiResource('categories', CategoryController::class)
