@@ -123,8 +123,10 @@ class BudgetController extends Controller
             return null;
         }
 
-        $category = Category::where('user_id', $userId)->find($categoryId);
-
-        return $category?->id;
+        return Category::where('id', $categoryId)
+            ->where(function ($q) use ($userId) {
+                $q->where('user_id', $userId)->orWhereNull('user_id');
+            })
+            ->value('id');
     }
 }
