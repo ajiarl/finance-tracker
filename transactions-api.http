@@ -328,3 +328,18 @@ Authorization: Bearer {{token}}
   "amount": 10000,
   "transaction_date": "2026-05-07"
 }
+
+### Export user data
+GET {{baseUrl}}/api/user/export-data
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Delete user account (CAUTION)
+DELETE {{baseUrl}}/api/user/delete-account
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "password": "password"
+}

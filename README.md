@@ -252,6 +252,26 @@ Contoh mark semua:
 }
 ```
 
+### User Data & Account Management
+
+- `GET /api/user/export-data`
+- `DELETE /api/user/delete-account`
+
+Perilaku endpoint:
+
+- `export-data` mengembalikan seluruh data finansial user (akun, kategori, transaksi, budget) dalam satu file JSON.
+- `delete-account` menghapus seluruh data user secara permanen.
+- `delete-account` wajib menyertakan password user untuk validasi keamanan.
+- Urutan penghapusan data internal untuk keamanan SQLite: `transactions` -> `accounts` -> `categories` -> `budgets` -> `notifications` -> `tokens` -> `users`.
+
+Contoh delete account:
+
+```json
+{
+  "password": "password-anda"
+}
+```
+
 ### Dashboard
 
 - `GET /api/dashboard`

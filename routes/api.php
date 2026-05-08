@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\AccountManagementController;
 
 // Public routes
 Route::post('/register', [AuthController::class, 'register']);
@@ -38,6 +39,12 @@ Route::middleware('auth:sanctum')->group(function () {
         });
     Route::post('accounts/{account}/reconcile', [AccountController::class, 'reconcile'])
         ->name('accounts.reconcile');
+
+    Route::prefix('user')->name('user.')->controller(AccountManagementController::class)
+         ->group(function () {
+             Route::get('export-data',    'exportData')    ->name('export');
+             Route::delete('delete-account', 'deleteAccount')->name('delete');
+         });
 
     Route::apiResource('accounts',     AccountController::class);
     Route::apiResource('categories', CategoryController::class)
