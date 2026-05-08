@@ -28,4 +28,9 @@ class Budget extends Model
     {
         return $this->belongsTo(Category::class);
     }
+
+    public function alerts()
+    {
+        return $this->hasMany(BudgetAlert::class);
+    }
 }

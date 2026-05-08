@@ -4,9 +4,14 @@ namespace App\Observers;
 
 use App\Models\Budget;
 use App\Models\Transaction;
+use App\Services\BudgetAlertService;
 
 class TransactionObserver
 {
+    public function __construct(
+        private BudgetAlertService $alertService
+    ) {}
+
     public function created(Transaction $transaction): void
     {
         $this->adjustMatchingBudgetSpent(
@@ -59,10 +64,7 @@ class TransactionObserver
         );
     }
 
-    public function forceDeleted(Transaction $transaction): void
-    {
-        //
-    }
+    public function forceDeleted(Transaction $transaction): void {}
 
     private function adjustMatchingBudgetSpent(
         ?int $userId,
@@ -93,5 +95,8 @@ class TransactionObserver
 
         $budget->spent = max(0, (float) $budget->spent + $delta);
         $budget->save();
+
+        // Picu pengecekan alert setelah spent ter-update
+        $this->alertService->checkAndNotify($budget);
     }
 }

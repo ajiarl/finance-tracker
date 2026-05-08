@@ -174,6 +174,15 @@ Validasi penting:
 - `PUT /api/budgets/{id}`
 - `DELETE /api/budgets/{id}`
 
+### Fitur Budget Alert
+
+Sistem secara otomatis memantau pengeluaran anggaran dan mengirimkan notifikasi saat mencapai ambang batas tertentu:
+
+- **Threshold**: 50%, 75%, 90%, dan 100%.
+- **Logika**: Alert hanya dikirim sekali per threshold untuk setiap anggaran guna menghindari spam.
+- **Pemicu**: Otomatis dipicu setiap kali ada transaksi (tambah/ubah/hapus) yang mempengaruhi saldo pengeluaran kategori terkait.
+- **Notifikasi**: Muncul di list notifikasi user dengan tipe `info`, `warning`, atau `error` (saat 100%).
+
 ### Settings
 
 - `GET /api/settings`
