@@ -88,4 +88,14 @@ class NotificationController extends Controller
             'message' => 'Notifikasi berhasil dihapus.',
         ]);
     }
+
+    public function clearAll(Request $request): JsonResponse
+    {
+        $count = Notification::forUser($request->user()->id)->delete();
+
+        return response()->json([
+            'message' => 'Semua notifikasi berhasil dihapus.',
+            'deleted_count' => $count,
+        ]);
+    }
 }

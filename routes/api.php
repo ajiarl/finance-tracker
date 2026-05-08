@@ -38,6 +38,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/', 'index')->name('index');
             Route::patch('read-all', 'markAllAsRead')->name('read-all');
             Route::patch('{id}/read', 'markAsRead')->name('read');
+            Route::delete('clear-all', 'clearAll')->name('clear-all');
             Route::delete('{id}', 'destroy')->name('destroy');
         });
     Route::post('accounts/{account}/reconcile', [AccountController::class, 'reconcile'])

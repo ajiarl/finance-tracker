@@ -52,31 +52,41 @@ class BudgetAlertService
             return;
         }
 
-        DB::transaction(function () use ($budget, $newThresholds, $percentage) {
-            foreach ($newThresholds as $threshold) {
-                // 1. Catat alert ke tabel budget_alerts
+        // PROFESSIONAL FIX: Hanya kirim threshold PALING TINGGI yang baru
+        // (Misal: langsung lompat ke 100%, lewati 50, 75, 90)
+        $highestNewThreshold = max($newThresholds);
+
+        DB::transaction(function () use ($budget, $highestNewThreshold, $percentage) {
+            // 1. Catat alert ke tabel budget_alerts (catat semua yang terlewati agar tidak spam nanti)
+            $existingAlerts = BudgetAlert::where('budget_id', $budget->id)->pluck('threshold')->toArray();
+            $thresholdsToRecord = array_filter(
+                self::THRESHOLDS,
+                fn ($t) => $percentage >= $t && ! in_array($t, $existingAlerts)
+            );
+
+            foreach ($thresholdsToRecord as $t) {
                 BudgetAlert::create([
                     'budget_id' => $budget->id,
-                    'threshold' => $threshold,
-                ]);
-
-                // 2. Kirim notifikasi ke user
-                Notification::create([
-                    'user_id' => $budget->user_id,
-                    'title'   => $this->buildTitle($threshold),
-                    'message' => $this->buildMessage($budget, $threshold, $percentage),
-                    'type'    => $threshold >= 100 ? 'error' : ($threshold >= 90 ? 'warning' : 'info'),
-                    'data'    => [
-                        'budget_id'       => $budget->id,
-                        'budget_name'     => $budget->name,
-                        'threshold'       => $threshold,
-                        'percentage_used' => round($percentage, 1),
-                        'spent_amount'    => (float) $budget->spent,
-                        'budget_amount'   => (float) $budget->amount,
-                        'severity'        => $threshold >= 100 ? 'critical' : ($threshold >= 90 ? 'warning' : 'info'),
-                    ],
+                    'threshold' => $t,
                 ]);
             }
+
+            // 2. Kirim HANYA SATU notifikasi (yang tertinggi)
+            Notification::create([
+                'user_id' => $budget->user_id,
+                'title'   => $this->buildTitle($highestNewThreshold),
+                'message' => $this->buildMessage($budget, $highestNewThreshold, $percentage),
+                'type'    => $highestNewThreshold >= 100 ? 'error' : ($highestNewThreshold >= 90 ? 'warning' : 'info'),
+                'data'    => [
+                    'budget_id'       => $budget->id,
+                    'budget_name'     => $budget->name,
+                    'threshold'       => $highestNewThreshold,
+                    'percentage_used' => round($percentage, 1),
+                    'spent_amount'    => (float) $budget->spent,
+                    'budget_amount'   => (float) $budget->amount,
+                    'severity'        => $highestNewThreshold >= 100 ? 'critical' : ($highestNewThreshold >= 90 ? 'warning' : 'info'),
+                ],
+            ]);
         });
     }
 
@@ -85,10 +95,10 @@ class BudgetAlertService
     private function buildTitle(int $threshold): string
     {
         return match (true) {
-            $threshold >= 100 => '🚨 Anggaran Habis!',
-            $threshold >= 90  => '⚠️ Anggaran Hampir Habis',
-            $threshold >= 75  => '📊 Peringatan Anggaran',
-            default           => '💡 Info Anggaran',
+            $threshold >= 100 => 'ANGGARAN HABIS',
+            $threshold >= 90  => 'ANGGARAN HAMPIR HABIS',
+            $threshold >= 75  => 'PERINGATAN ANGGARAN',
+            default           => 'INFO ANGGARAN',
         };
     }
 
@@ -99,12 +109,12 @@ class BudgetAlertService
         $pctLabel = number_format($percentage, 1);
 
         return match (true) {
-            $threshold >= 100 => "Anggaran \"{$budget->name}\" sudah habis! "
-                               . "Pengeluaran Rp{$spent} telah mencapai 100% dari limit Rp{$amount}.",
-            $threshold >= 90  => "Anggaran \"{$budget->name}\" hampir habis ({$pctLabel}%). "
-                               . "Sisa anggaran sangat sedikit dari Rp{$amount}.",
-            default           => "Pengeluaran anggaran \"{$budget->name}\" telah mencapai {$threshold}% "
-                               . "(Rp{$spent} dari Rp{$amount}).",
+            $threshold >= 100 => "ANGGARAN \"{$budget->name}\" SUDAH HABIS. "
+                               . "PENGELUARAN RP{$spent} TELAH MENCAPAI 100% DARI LIMIT RP{$amount}.",
+            $threshold >= 90  => "ANGGARAN \"{$budget->name}\" HAMPIR HABIS ({$pctLabel}%). "
+                               . "SISA ANGGARAN SANGAT SEDIKIT DARI RP{$amount}.",
+            default           => "PENGELUARAN ANGGARAN \"{$budget->name}\" TELAH MENCAPAI {$threshold}% "
+                               . "(RP{$spent} DARI RP{$amount}).",
         };
     }
 }
