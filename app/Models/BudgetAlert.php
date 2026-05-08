@@ -9,6 +9,14 @@ class BudgetAlert extends Model
     public $timestamps    = false; // hanya pakai created_at via useCurrent()
     public $incrementing  = true;
 
+    protected static function boot(): void
+    {
+        parent::boot();
+        static::creating(function ($model) {
+            $model->created_at = now();
+        });
+    }
+
     protected $fillable = [
         'budget_id',
         'threshold',

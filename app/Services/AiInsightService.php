@@ -270,20 +270,18 @@ class AiInsightService
     {
         $since = Carbon::now()->subMonths(self::LOOKBACK_MONTHS)->startOfMonth()->toDateString();
 
-        $rows = DB::table('transactions')
-            ->join('categories', 'transactions.category_id', '=', 'categories.id')
-            ->selectRaw('categories.name as category_name, AVG(monthly_sum) as avg_monthly')
-            ->fromSub(
-                DB::table('transactions')
-                    ->selectRaw("category_id, strftime('%Y-%m', transaction_date) as month, SUM(amount) as monthly_sum")
-                    ->where('user_id', $userId)
-                    ->where('type', 'expense')
-                    ->whereNull('deleted_at')
-                    ->where('transaction_date', '>=', $since)
-                    ->groupByRaw("category_id, strftime('%Y-%m', transaction_date)"),
-                'monthly_by_cat'
-            )
+        $sub = DB::table('transactions')
+            ->selectRaw("category_id, strftime('%Y-%m', transaction_date) as month, SUM(amount) as monthly_sum")
+            ->where('user_id', $userId)
+            ->where('type', 'expense')
+            ->whereNull('deleted_at')
+            ->where('transaction_date', '>=', $since)
+            ->groupByRaw("category_id, strftime('%Y-%m', transaction_date)");
+
+        $rows = DB::table(DB::raw("({$sub->toSql()}) as monthly_by_cat"))
+            ->mergeBindings($sub)
             ->join('categories', 'monthly_by_cat.category_id', '=', 'categories.id')
+            ->selectRaw('categories.name as category_name, AVG(monthly_sum) as avg_monthly')
             ->groupBy('monthly_by_cat.category_id', 'categories.name')
             ->orderByRaw('avg_monthly DESC')
             ->limit(5)
