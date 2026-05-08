@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\AccountManagementController;
+use App\Http\Controllers\InsightController;
 
 // Public routes
 Route::post('/register', [AuthController::class, 'register']);
@@ -23,6 +24,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('dashboard', [DashboardController::class, 'index']);
     Route::get('dashboard/charts', [DashboardController::class, 'charts']);
+    Route::get('insights', [InsightController::class, 'index'])->name('insights.index');
     Route::post('imports/csv', [ImportController::class, 'uploadCsv']);
     Route::get('imports/{import}/status', [ImportController::class, 'status']);
     Route::post('imports/{import}/map', [ImportController::class, 'map']);

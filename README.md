@@ -183,6 +183,20 @@ Sistem secara otomatis memantau pengeluaran anggaran dan mengirimkan notifikasi 
 - **Pemicu**: Otomatis dipicu setiap kali ada transaksi (tambah/ubah/hapus) yang mempengaruhi saldo pengeluaran kategori terkait.
 - **Notifikasi**: Muncul di list notifikasi user dengan tipe `info`, `warning`, atau `error` (saat 100%).
 
+### AI Insights
+
+Fitur analisis keuangan berbasis statistik untuk memberikan gambaran kesehatan finansial user:
+
+- `GET /api/insights`
+
+**Ringkasan Algoritma:**
+
+| Method | Teknik | Input Data |
+| :--- | :--- | :--- |
+| `getPredictions` | Weighted average + tren linear | 3 bulan terakhir per tipe |
+| `getAnomalies` | Z-score (threshold ≥ 2.0σ) | Per kategori, bulan ini vs baseline |
+| `getRecommendations` | Rule-based scoring | Output anomali + rasio tabungan |
+
 ### Settings
 
 - `GET /api/settings`
