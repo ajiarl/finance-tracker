@@ -96,8 +96,8 @@ class TransactionObserver
                 if ($category) {
                     \App\Models\Notification::create([
                         'user_id' => $userId,
-                        'title' => '💡 Tip Anggaran',
-                        'message' => "Anda mencatat pengeluaran di '{$category->name}'. Mau buat anggaran untuk kategori ini agar lebih terkontrol?",
+                        'title' => 'TIP ANGGARAN',
+                        'message' => "ANDA MENCATAT PENGELUARAN DI '{$category->name}'. MAU BUAT ANGGARAN UNTUK KATEGORI INI AGAR LEBIH TERKONTROL?",
                         'type' => 'info',
                         'data' => [
                             'category_id' => $categoryId,
