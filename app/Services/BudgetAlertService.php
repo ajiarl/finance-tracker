@@ -13,36 +13,36 @@ class BudgetAlertService
 
     public function checkAndNotify(Budget $budget): void
     {
-        // Tidak perlu cek jika budget tidak aktif atau amount = 0
+        // 1. Audit & Pre-check
         if (! $budget->is_active || (float) $budget->amount <= 0) {
             return;
         }
 
         $percentage = ((float) $budget->spent / (float) $budget->amount) * 100;
 
-        // Kumpulkan threshold yang sudah terlewati
+        // 2. Global Threshold Calculation
         $triggeredThresholds = array_filter(
             self::THRESHOLDS,
             fn (int $t) => $percentage >= $t
         );
 
-        if (empty($triggeredThresholds)) {
-            // Jika tidak ada threshold yang terlewati, hapus semua alert lama untuk budget ini
-            BudgetAlert::where('budget_id', $budget->id)->delete();
-            return;
-        }
-
-        // Reset threshold lock jika pengeluaran turun (e.g. transaksi dihapus)
+        // 3. LOCK RESET LOGIC (Universal Fix)
+        // Jika pengeluaran turun, kita harus menghapus "lock" di database
+        // agar notifikasi bisa muncul lagi jika pengeluaran naik kembali.
+        // Berlaku untuk SEMUA kategori (Belanja, Hiburan, dll).
         BudgetAlert::where('budget_id', $budget->id)
             ->whereNotIn('threshold', $triggeredThresholds)
             ->delete();
 
-        // Ambil threshold yang sudah pernah di-alert untuk budget ini
+        if (empty($triggeredThresholds)) {
+            return;
+        }
+
+        // 4. Notification Filtering
         $existingThresholds = BudgetAlert::where('budget_id', $budget->id)
             ->pluck('threshold')
             ->toArray();
 
-        // Hanya proses threshold yang BELUM pernah di-alert
         $newThresholds = array_filter(
             $triggeredThresholds,
             fn (int $t) => ! in_array($t, $existingThresholds)
