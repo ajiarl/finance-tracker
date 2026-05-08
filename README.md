@@ -333,6 +333,7 @@ Automated test:
 - [AccountControllerTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/AccountControllerTest.php)
 - [AccountManagementTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/AccountManagementTest.php)
 - [BudgetAlertTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/BudgetAlertTest.php)
+- [BudgetCategoryTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/BudgetCategoryTest.php)
 - [CategoryControllerTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/CategoryControllerTest.php)
 - [InsightTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/InsightTest.php)
 - [NotificationControllerTest.php](D:/0. MataKuliah/Semester 4/RPL/finance-tracker/tests/Feature/NotificationControllerTest.php)
