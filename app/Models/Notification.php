@@ -16,11 +16,13 @@ class Notification extends Model
         'title',
         'message',
         'type',
+        'data',
         'read_at',
     ];
 
     protected $casts = [
         'read_at' => 'datetime',
+        'data' => 'array',
     ];
 
     public function scopeUnread($query)

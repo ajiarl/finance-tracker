@@ -12,6 +12,13 @@ class NotificationController extends Controller
     {
         $userId = $request->user()->id;
 
+        // Lightweight response for polling unread count
+        if ($request->query('count_only')) {
+            return response()->json([
+                'unread_count' => Notification::forUser($userId)->unread()->count(),
+            ]);
+        }
+
         $notifications = Notification::forUser($userId)
             ->orderBy('created_at', 'desc')
             ->get()
@@ -20,6 +27,7 @@ class NotificationController extends Controller
                 'title' => $notification->title,
                 'message' => $notification->message,
                 'type' => $notification->type,
+                'data' => $notification->data, // Metadata for deep-linking
                 'is_read' => $notification->isRead(),
                 'read_at' => $notification->read_at?->toISOString(),
                 'created_at' => $notification->created_at->toISOString(),
@@ -63,6 +71,21 @@ class NotificationController extends Controller
         return response()->json([
             'message' => 'Semua notifikasi ditandai sudah dibaca.',
             'updated_count' => $updated,
+        ]);
+    }
+
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $notification = Notification::forUser($request->user()->id)->find($id);
+
+        if (! $notification) {
+            return response()->json(['message' => 'Notifikasi tidak ditemukan.'], 404);
+        }
+
+        $notification->delete();
+
+        return response()->json([
+            'message' => 'Notifikasi berhasil dihapus.',
         ]);
     }
 }

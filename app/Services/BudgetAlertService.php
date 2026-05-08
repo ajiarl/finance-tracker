@@ -27,8 +27,15 @@ class BudgetAlertService
         );
 
         if (empty($triggeredThresholds)) {
+            // Jika tidak ada threshold yang terlewati, hapus semua alert lama untuk budget ini
+            BudgetAlert::where('budget_id', $budget->id)->delete();
             return;
         }
+
+        // Reset threshold lock jika pengeluaran turun (e.g. transaksi dihapus)
+        BudgetAlert::where('budget_id', $budget->id)
+            ->whereNotIn('threshold', $triggeredThresholds)
+            ->delete();
 
         // Ambil threshold yang sudah pernah di-alert untuk budget ini
         $existingThresholds = BudgetAlert::where('budget_id', $budget->id)
@@ -59,6 +66,15 @@ class BudgetAlertService
                     'title'   => $this->buildTitle($threshold),
                     'message' => $this->buildMessage($budget, $threshold, $percentage),
                     'type'    => $threshold >= 100 ? 'error' : ($threshold >= 90 ? 'warning' : 'info'),
+                    'data'    => [
+                        'budget_id'       => $budget->id,
+                        'budget_name'     => $budget->name,
+                        'threshold'       => $threshold,
+                        'percentage_used' => round($percentage, 1),
+                        'spent_amount'    => (float) $budget->spent,
+                        'budget_amount'   => (float) $budget->amount,
+                        'severity'        => $threshold >= 100 ? 'critical' : ($threshold >= 90 ? 'warning' : 'info'),
+                    ],
                 ]);
             }
         });

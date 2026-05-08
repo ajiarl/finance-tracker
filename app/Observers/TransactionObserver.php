@@ -90,6 +90,23 @@ class TransactionObserver
             ->first();
 
         if (! $budget) {
+            // Suggest creating a budget for unbudgeted categories (only for new spending)
+            if ($delta > 0) {
+                $category = \App\Models\Category::find($categoryId);
+                if ($category) {
+                    \App\Models\Notification::create([
+                        'user_id' => $userId,
+                        'title' => '💡 Tip Anggaran',
+                        'message' => "Anda mencatat pengeluaran di '{$category->name}'. Mau buat anggaran untuk kategori ini agar lebih terkontrol?",
+                        'type' => 'info',
+                        'data' => [
+                            'category_id' => $categoryId,
+                            'category_name' => $category->name,
+                            'suggestion' => 'create_budget'
+                        ]
+                    ]);
+                }
+            }
             return;
         }
 
