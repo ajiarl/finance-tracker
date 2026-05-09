@@ -9,6 +9,7 @@ use App\Models\Import;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -107,7 +108,7 @@ class ImportController extends Controller
             ]),
         ]);
 
-        [$successCount, $errors] = $this->processImport(
+        [$successCount, $errors, $warnings] = $this->processImport(
             $request->user()->id,
             $import,
             $account,
@@ -126,6 +127,7 @@ class ImportController extends Controller
                 'rows_processed' => $import->rows_processed,
                 'success_count' => $successCount,
                 'errors' => $errors,
+                'warnings' => $warnings,
             ],
         ]);
     }
@@ -145,7 +147,7 @@ class ImportController extends Controller
                 'errors' => [['message' => 'Unable to read import file.']],
             ]);
 
-            return [0, [['message' => 'Unable to read import file.']]];
+            return [0, [['message' => 'Unable to read import file.']], []];
         }
 
         $headers = [];
@@ -153,6 +155,10 @@ class ImportController extends Controller
         $processed = 0;
         $success = 0;
         $errors = [];
+        $warnings = [];
+
+        $expenseCache = $this->buildCategoryCache($userId, 'expense');
+        $incomeCache  = $this->buildCategoryCache($userId, 'income');
 
         try {
             if ($hasHeader) {
@@ -168,11 +174,19 @@ class ImportController extends Controller
                     $amount = $this->parseAmount($this->mappedValue($rowData, $mappings['amount'] ?? null));
                     $dateValue = $this->mappedValue($rowData, $mappings['date'] ?? null);
                     $transactionDate = $this->parseDate($dateValue, $dateFormat);
-                    $category = $this->resolveCategory(
-                        $userId,
-                        $this->mappedValue($rowData, $mappings['category'] ?? null),
-                        $type
-                    );
+                    if ($type === 'transfer') {
+                        $category = null;
+                    } else {
+                        $cache = $type === 'income' ? $incomeCache : $expenseCache;
+                        $category = $this->resolveOrCreateCategory(
+                            $userId,
+                            $type,
+                            $this->mappedValue($rowData, $mappings['category'] ?? null),
+                            $cache,
+                            $warnings,
+                            $rowNumber
+                        );
+                    }
 
                     DB::transaction(function () use ($userId, $account, $mappings, $rowData, $type, $amount, $transactionDate, $category) {
                         Transaction::create([
@@ -208,9 +222,12 @@ class ImportController extends Controller
             'status' => empty($errors) ? 'completed' : ($success > 0 ? 'completed' : 'failed'),
             'rows_processed' => $processed,
             'errors' => $errors,
+            'metadata' => array_merge($import->metadata ?? [], [
+                'warnings' => $warnings,
+            ]),
         ]);
 
-        return [$success, $errors];
+        return [$success, $errors, $warnings];
     }
 
     private function analyzeCsv(string $storedPath, bool $hasHeader): array
@@ -298,22 +315,94 @@ class ImportController extends Controller
         return $amount < 0 ? 'expense' : 'income';
     }
 
-    private function resolveCategory(int $userId, mixed $value, string $type): ?Category
+    private function normalizeString(string $value): string
     {
-        if ($value === null || $value === '') {
+        $value = mb_strtolower(trim($value));
+        $value = preg_replace('/\s+/', ' ', $value);
+        $value = preg_replace('/[^\w\s]/u', '', $value);
+        return $value;
+    }
+
+    private function buildCategoryCache(int $userId, string $type): Collection
+    {
+        return Category::where('user_id', $userId)
+            ->where('type', $type)
+            ->get()
+            ->keyBy(fn(Category $cat) => $this->normalizeString($cat->name));
+    }
+
+    private function resolveOrCreateCategory(
+        int        $userId,
+        string     $type,
+        mixed      $rawValue,
+        Collection &$cache,
+        array      &$warnings,
+        int        $rowNumber
+    ): ?Category {
+        if ($rawValue === null || trim((string) $rawValue) === '') {
             return null;
         }
 
-        if (is_numeric($value)) {
-            return Category::where('user_id', $userId)
-                ->where('type', $type)
-                ->find((int) $value);
+        $normalized = $this->normalizeString((string) $rawValue);
+
+        if ($cache->has($normalized)) {
+            return $cache->get($normalized);
         }
 
-        return Category::where('user_id', $userId)
-            ->where('type', $type)
-            ->whereRaw('LOWER(name) = ?', [Str::lower(trim((string) $value))])
-            ->first();
+        $slug = Str::slug($normalized);
+        $slugMatch = $cache->first(
+            fn(Category $cat) => Str::slug($this->normalizeString($cat->name)) === $slug
+        );
+        if ($slugMatch) {
+            return $slugMatch;
+        }
+
+        $containsMatch = $cache->first(function (Category $cat) use ($normalized) {
+            $catNorm = $this->normalizeString($cat->name);
+            return str_contains($catNorm, $normalized) || str_contains($normalized, $catNorm);
+        });
+        if ($containsMatch) {
+            $warnings[] = [
+                'row'     => $rowNumber,
+                'message' => "Category '{$rawValue}' loosely matched to '{$containsMatch->name}'.",
+            ];
+            return $containsMatch;
+        }
+
+        $bestMatch = null;
+        $bestScore = 0;
+        $threshold = 70;
+
+        foreach ($cache as $catNorm => $category) {
+            similar_text($normalized, $catNorm, $percent);
+            if ($percent > $bestScore) {
+                $bestScore = $percent;
+                $bestMatch = $category;
+            }
+        }
+
+        if ($bestScore >= $threshold && $bestMatch !== null) {
+            $warnings[] = [
+                'row'     => $rowNumber,
+                'message' => "Category '{$rawValue}' fuzzy-matched to '{$bestMatch->name}' ({$bestScore}% similarity).",
+            ];
+            return $bestMatch;
+        }
+
+        $newCategory = Category::create([
+            'user_id' => $userId,
+            'type'    => $type,
+            'name'    => trim((string) $rawValue),
+        ]);
+
+        $cache->put($normalized, $newCategory);
+
+        $warnings[] = [
+            'row'     => $rowNumber,
+            'message' => "Category '{$rawValue}' did not exist and was auto-created.",
+        ];
+
+        return $newCategory;
     }
 
     private function parseAmount(mixed $value): float
@@ -349,11 +438,21 @@ class ImportController extends Controller
             throw new \RuntimeException('Date is required.');
         }
 
-        if ($dateFormat) {
-            return Carbon::createFromFormat($dateFormat, trim((string) $value));
-        }
+        $stringValue = trim((string) $value);
 
-        return Carbon::parse($value);
+        try {
+            if ($dateFormat) {
+                return Carbon::createFromFormat($dateFormat, $stringValue);
+            }
+
+            if (str_contains($stringValue, '/')) {
+                return Carbon::createFromFormat('d/m/Y', $stringValue);
+            }
+
+            return Carbon::parse($stringValue);
+        } catch (\Exception $e) {
+            throw new \RuntimeException("Could not parse date '{$stringValue}'. Format mismatch.");
+        }
     }
 
     private function applyBalanceDelta(Account $account, string $type, float $amount): void
