@@ -14,6 +14,7 @@ use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\AccountManagementController;
 use App\Http\Controllers\InsightController;
 use App\Http\Controllers\Api\AnalyticsController;
+use App\Http\Controllers\Api\AiProxyController;
 
 // Public routes
 Route::post('/register', [AuthController::class, 'register']);
@@ -27,6 +28,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('dashboard/charts', [DashboardController::class, 'charts']);
     Route::get('insights', [InsightController::class, 'index'])->name('insights.index');
     Route::get('analytics', [AnalyticsController::class, 'index']);
+    Route::get('ai-insight', [AiProxyController::class, 'getInsight']);
     Route::post('imports/csv', [ImportController::class, 'uploadCsv']);
     Route::get('imports/{import}/status', [ImportController::class, 'status']);
     Route::post('imports/{import}/map', [ImportController::class, 'map']);
