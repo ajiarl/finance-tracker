@@ -185,7 +185,9 @@ Sistem secara otomatis memantau pengeluaran anggaran dan mengirimkan notifikasi 
 
 ### AI Insights
 
-Fitur analisis keuangan berbasis statistik untuk memberikan gambaran kesehatan finansial user:
+Dua endpoint analisis keuangan tersedia: satu berbasis statistik (rule-based), satu berbasis Gemini AI (generatif).
+
+#### Rule-Based Insights
 
 - `GET /api/insights`
 
@@ -196,6 +198,29 @@ Fitur analisis keuangan berbasis statistik untuk memberikan gambaran kesehatan f
 | `getPredictions` | Weighted average + tren linear | 3 bulan terakhir per tipe |
 | `getAnomalies` | Z-score (threshold ≥ 2.0σ) | Per kategori, bulan ini vs baseline |
 | `getRecommendations` | Rule-based scoring | Output anomali + rasio tabungan |
+
+#### Gemini AI Proxy — "Pak Hemat" ✅ _Phase 10_
+
+- `GET /api/ai-insight`
+
+Query params: `start_date`, `end_date` (default: bulan berjalan).
+
+Mengaggregasi ringkasan keuangan user (total pemasukan, pengeluaran, top 3 kategori) lalu mengirimkannya ke Gemini 2.0 Flash dengan persona **"Pak Hemat"** — penasihat keuangan sarkastis yang selalu memberikan satu saran konkret dalam 2 kalimat Bahasa Indonesia.
+
+Contoh response:
+
+```json
+{
+  "data": {
+    "insight": "Pengeluaranmu di kategori Hiburan bulan ini melonjak hampir dua kali lipat dari biasanya — itu bukan 'refreshing', itu boros. Coba alokasikan selisihnya ke dana darurat minimal satu bulan pengeluaran."
+  }
+}
+```
+
+**Perilaku khusus:**
+
+- Jika Gemini mengembalikan `429 RESOURCE_EXHAUSTED` (kuota habis), endpoint tetap mengembalikan `200` dengan pesan fallback yang tetap sesuai persona Pak Hemat — panel UI tidak pernah masuk error state hanya karena rate limit.
+- Error non-429 (jaringan, server) mengembalikan `503` dengan detail di field `details`.
 
 ### Settings
 
